@@ -7,29 +7,14 @@ interface MathRendererProps {
 }
 
 /**
- * Renders LaTeX math using KaTeX.
+ * Renders KaTeX-compatible LaTeX math.
+ * The content is pre-cleaned by the generation pipeline, so minimal processing needed.
  * Falls back to raw LaTeX on errors.
  */
 export default function MathRenderer({ math, display = false }: MathRendererProps) {
   const html = useMemo(() => {
     try {
-      // Clean up common LaTeX environments that KaTeX handles
-      let cleaned = math.trim();
-
-      // Strip outer equation/align environments — KaTeX handles the math inside
-      cleaned = cleaned
-        .replace(/\\begin\{(?:equation|align|gather|multline)\*?\}/g, '')
-        .replace(/\\end\{(?:equation|align|gather|multline)\*?\}/g, '')
-        .replace(/\\label\{[^}]*\}/g, '')
-        .replace(/\\tag\{[^}]*\}/g, '')
-        .trim();
-
-      // If there are \\ newlines, wrap in aligned environment
-      if (cleaned.includes('\\\\') && !cleaned.includes('\\begin{')) {
-        cleaned = `\\begin{aligned}${cleaned}\\end{aligned}`;
-      }
-
-      return katex.renderToString(cleaned, {
+      return katex.renderToString(math.trim(), {
         displayMode: display,
         throwOnError: false,
         trust: true,
