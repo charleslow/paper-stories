@@ -1,0 +1,7 @@
+{
+  "name": "paper-stories",
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ]
+}

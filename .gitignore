@@ -1,0 +1,5 @@
+node_modules/
+dist/
+.paper-stories-tmp/
+*.tgz
+.DS_Store
