@@ -19,7 +19,7 @@ Use Glob and Read tools to explore and read them. These are your PRIMARY source 
 Use Read tool to read it. ${hasSource ? 'Use this as a SECONDARY source for figures/tables context.' : 'This is your PRIMARY source.'}`
     : '';
 
-  return `You are a Paper Stories generator. Your job is to create a deep, technically rigorous walkthrough of an ML research paper, structured as an interactive story with ~20 chapters.
+  return `You are a Paper Stories generator. Your job is to create a deep, technically rigorous walkthrough of an ML research paper, structured as an interactive story.
 
 ## Paper
 - arXiv ID: ${arxivId}
@@ -52,24 +52,29 @@ Execute these stages in order, writing checkpoint files after each:
 - End the file with the line: EXPLORATION_COMPLETE
 
 ### Stage 2: Chapter Outline
-Design ~20 chapters covering (adjust based on paper content):
+Design chapters that best serve the user's query and the paper's content.
 
-1. **Overview** — What problem does this paper solve? Why does it matter? (no excerpts)
-2. **Problem Statement** — Formal problem definition
-3. **Related Work / Close Competitors** — How does this compare to prior work?
-4. **Key Insight / Novel Angle** — What's the core new idea?
-5-12. **Methodology** — Architecture, algorithm, training procedure, loss functions (multiple chapters)
-13-14. **Theoretical Analysis** — If applicable (proofs, bounds, complexity)
-15. **Datasets & Benchmarks** — What data is used? How is evaluation done?
-16-17. **Results** — Main results tables, comparisons
-18. **Ablations** — What components matter most?
-19. **Limitations & Future Work** — What are the weaknesses?
-20. **Summary** — Key takeaways and impact (no excerpts)
+**Chapter count**: Flexible based on query scope and paper length. Default to ~20 for
+comprehensive deep-dives. Use fewer (8-15) for focused queries about a specific aspect.
+Use more (20-25) for long or dense papers. The story should feel complete, not padded.
 
-If the user provided a query, STEER the story toward that topic:
-- Allocate more chapters to the queried aspect
-- Still cover the full paper but with emphasis on the query
-- Mention the query focus in the overview chapter
+**Structure**: Adapt to what the query needs:
+
+For a **comprehensive deep-dive** (no query, or broad query), cover the full paper arc:
+- Overview → Problem → Related Work → Key Insight → Methodology (multiple chapters) →
+  Theoretical Analysis → Experiments/Results → Ablations → Limitations → Summary
+
+For a **focused query** (e.g., "How does the attention mechanism work?"), go deeper on
+the relevant aspect:
+- Brief overview for context → Deep coverage of the queried topic across multiple
+  chapters → Connections to the rest of the paper → Summary
+- Skip or condense sections not relevant to the query
+
+**Required constraints**:
+- First chapter: Overview (no excerpts) — orient the reader
+- Last chapter: Summary (no excerpts) — key takeaways
+- Each chapter should have ONE clear teaching point
+- Chapter labels: 2-4 words (for sidebar)
 
 Write the outline to ${generationDir}/outline.md
 End the file with: OUTLINE_COMPLETE
@@ -164,7 +169,7 @@ Assemble everything into a single story.json file.
 5. Chapter IDs are sequential: chapter-0, chapter-1, ...
 6. All KaTeX in explanations uses valid LaTeX syntax
 7. No hallucinated claims — everything is grounded in the paper
-8. Total chapters: 15-25 range
+8. Total chapters: 8-25 range (flexible based on query and paper length)
 
 Write the final story.json to ${generationDir}/story.json
 After writing, end by creating a file ${generationDir}/DONE containing just the text "DONE".
