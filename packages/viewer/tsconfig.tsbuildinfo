@@ -1,0 +1,1 @@
+{"root":["./src/App.tsx","./src/api.ts","./src/main.tsx","./src/types.ts","./src/components/ChapterDisplay.tsx","./src/components/ExcerptPanel.tsx","./src/components/ExplanationPanel.tsx","./src/components/LandingPage.tsx","./src/components/MathRenderer.tsx","./src/components/Sidebar.tsx"],"version":"5.9.3"}
