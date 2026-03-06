@@ -17,7 +17,6 @@ export default function MathRenderer({ math, display = false }: MathRendererProp
       return katex.renderToString(math.trim(), {
         displayMode: display,
         throwOnError: false,
-        trust: true,
         strict: false,
       });
     } catch {

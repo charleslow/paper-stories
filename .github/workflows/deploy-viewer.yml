@@ -25,7 +25,6 @@ jobs:
           node-version: 20
 
       - name: Install dependencies
-        working-directory: packages/viewer
         run: npm ci
 
       - name: Build viewer
