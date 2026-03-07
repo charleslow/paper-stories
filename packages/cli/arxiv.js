@@ -64,8 +64,8 @@ export async function downloadLatexSource(arxivId, outputDir) {
       // Try plain TeX (some papers are a single .tex file, not tarred)
       const content = readFileSync(tarPath, 'utf8');
       if (content.includes('\\begin{document}') || content.includes('\\documentclass')) {
-        const { writeFileSync } = await import('fs');
-        writeFileSync(join(sourceDir, 'main.tex'), content);
+        const { writeFileSync: writeFile } = await import('fs');
+        writeFile(join(sourceDir, 'main.tex'), content);
       } else {
         console.log(`  ⚠ Unknown source format: ${fileType}`);
         return { sourceDir: null, hasSource: false };

@@ -8,13 +8,13 @@ import { Story } from './types';
  *   ?repo=user/repo&story=story-id
  *   ?repo=user/repo&branch=main&story=story-id
  */
-export function parseStoryUrl(): { storyUrl: string | null; manifestUrl: string | null } {
+export function parseStoryUrl(): { storyUrl: string | null } {
   const params = new URLSearchParams(window.location.search);
 
   // Direct URL
   const directUrl = params.get('url');
   if (directUrl) {
-    return { storyUrl: directUrl, manifestUrl: null };
+    return { storyUrl: directUrl };
   }
 
   // GitHub repo shorthand
@@ -25,16 +25,10 @@ export function parseStoryUrl(): { storyUrl: string | null; manifestUrl: string 
   if (repo && story) {
     const [owner, repoName] = repo.split('/');
     const url = `https://raw.githubusercontent.com/${owner}/${repoName}/${branch}/stories/${story}.json`;
-    return { storyUrl: url, manifestUrl: null };
+    return { storyUrl: url };
   }
 
-  if (repo && !story) {
-    const [owner, repoName] = repo.split('/');
-    const url = `https://raw.githubusercontent.com/${owner}/${repoName}/${branch}/stories/manifest.json`;
-    return { storyUrl: null, manifestUrl: url };
-  }
-
-  return { storyUrl: null, manifestUrl: null };
+  return { storyUrl: null };
 }
 
 /**
@@ -77,21 +71,3 @@ function validateStory(data: unknown): asserts data is Story {
   }
 }
 
-export interface ManifestEntry {
-  id: string;
-  title: string;
-  arxivId?: string;
-  createdAt: string;
-}
-
-export interface Manifest {
-  stories: ManifestEntry[];
-}
-
-export async function fetchManifest(url: string): Promise<Manifest> {
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error(`Failed to fetch manifest: ${response.status}`);
-  }
-  return response.json();
-}

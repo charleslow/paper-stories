@@ -30,11 +30,12 @@ export default function App() {
   }, []);
 
   const navigateChapter = useCallback((index: number) => {
-    if (state.status === 'ready') {
-      const clamped = Math.max(0, Math.min(index, state.story.chapters.length - 1));
-      setState({ ...state, currentChapter: clamped });
-    }
-  }, [state]);
+    setState(prev => {
+      if (prev.status !== 'ready') return prev;
+      const clamped = Math.max(0, Math.min(index, prev.story.chapters.length - 1));
+      return { ...prev, currentChapter: clamped };
+    });
+  }, []);
 
   // Keyboard navigation
   useEffect(() => {
