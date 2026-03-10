@@ -11,13 +11,17 @@
  */
 
 import { Command } from 'commander';
-import { spawn } from 'child_process';
+import { spawn, execFileSync } from 'child_process';
 import { mkdirSync, existsSync, readFileSync, writeFileSync, cpSync, unlinkSync } from 'fs';
-import { join, resolve } from 'path';
+import { join, resolve, dirname } from 'path';
+import { fileURLToPath } from 'url';
 import { v4 as uuidv4 } from 'uuid';
 import ora from 'ora';
 import { parseArxivId, downloadLatexSource, downloadPdf } from './arxiv.js';
 import { buildPrompt } from './prompt.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 const program = new Command();
 
@@ -72,6 +76,25 @@ async function generateStory(arxivInput, options) {
     throw new Error('Could not download either LaTeX source or PDF. Check the arXiv ID.');
   }
 
+  // Extract PDF text regions with bounding boxes
+  let regionsPath = null;
+  if (pdfPath) {
+    console.log('📐 Extracting PDF text regions...');
+    regionsPath = join(workDir, 'regions.json');
+    const extractScript = join(__dirname, 'extract_regions.py');
+    try {
+      execFileSync('uv', ['run', extractScript, pdfPath, '-o', regionsPath], {
+        stdio: ['pipe', 'pipe', 'pipe'],
+      });
+      const regions = JSON.parse(readFileSync(regionsPath, 'utf8'));
+      const blockCount = regions.pages.reduce((sum, p) => sum + p.blocks.length, 0);
+      console.log(`   ✓ Extracted ${blockCount} text blocks from ${regions.totalPages} pages`);
+    } catch (err) {
+      console.warn(`   ⚠ Region extraction failed (story will proceed without bboxes): ${err.message}`);
+      regionsPath = null;
+    }
+  }
+
   // Build the prompt
   const prompt = buildPrompt({
     arxivId,
@@ -79,6 +102,7 @@ async function generateStory(arxivInput, options) {
     query: options.query,
     sourceDir: sourceResult.hasSource ? sourceResult.sourceDir : null,
     pdfPath,
+    regionsPath,
     generationDir,
   });
 
@@ -249,6 +273,15 @@ function validateStory(story) {
       }
       if (!['text', 'equation'].includes(ex.type)) {
         throw new Error(`Chapter ${ch.id} has invalid excerpt type: ${ex.type}`);
+      }
+      if (ex.pdfRegion) {
+        const { page, bbox } = ex.pdfRegion;
+        if (typeof page !== 'number' || page < 0) {
+          throw new Error(`Chapter ${ch.id} has excerpt with invalid pdfRegion.page`);
+        }
+        if (!Array.isArray(bbox) || bbox.length !== 4 || bbox.some(v => typeof v !== 'number' || v < 0 || v > 1)) {
+          throw new Error(`Chapter ${ch.id} has excerpt with invalid pdfRegion.bbox (must be 4 numbers in [0,1])`);
+        }
       }
     }
   }

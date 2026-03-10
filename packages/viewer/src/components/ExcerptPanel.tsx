@@ -62,6 +62,11 @@ function ExcerptCard({ excerpt }: { excerpt: Excerpt }) {
         {excerpt.sourceFile && (
           <span className="excerpt-source-file">{excerpt.sourceFile}</span>
         )}
+        {excerpt.pdfRegion && (
+          <span className="excerpt-pdf-badge" title={`PDF page ${excerpt.pdfRegion.page + 1}`}>
+            p.{excerpt.pdfRegion.page + 1}
+          </span>
+        )}
       </div>
 
       <div className="excerpt-content">
