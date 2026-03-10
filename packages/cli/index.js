@@ -11,13 +11,18 @@
  */
 
 import { Command } from 'commander';
-import { spawn } from 'child_process';
+import { spawn, execFileSync } from 'child_process';
 import { mkdirSync, existsSync, readFileSync, writeFileSync, cpSync, unlinkSync } from 'fs';
-import { join, resolve } from 'path';
+import { join, resolve, dirname } from 'path';
+import { fileURLToPath } from 'url';
 import { v4 as uuidv4 } from 'uuid';
 import ora from 'ora';
 import { parseArxivId, downloadLatexSource, downloadPdf } from './arxiv.js';
 import { buildPrompt } from './prompt.js';
+import { validateStory } from './validate.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 const program = new Command();
 
@@ -72,6 +77,25 @@ async function generateStory(arxivInput, options) {
     throw new Error('Could not download either LaTeX source or PDF. Check the arXiv ID.');
   }
 
+  // Extract PDF text regions with bounding boxes
+  let regionsPath = null;
+  if (pdfPath) {
+    console.log('📐 Extracting PDF text regions...');
+    regionsPath = join(workDir, 'regions.json');
+    const extractScript = join(__dirname, 'extract_regions.py');
+    try {
+      execFileSync('uv', ['run', extractScript, pdfPath, '-o', regionsPath], {
+        stdio: ['pipe', 'pipe', 'pipe'],
+      });
+      const regions = JSON.parse(readFileSync(regionsPath, 'utf8'));
+      const blockCount = regions.pages.reduce((sum, p) => sum + p.blocks.length, 0);
+      console.log(`   ✓ Extracted ${blockCount} text blocks from ${regions.totalPages} pages`);
+    } catch (err) {
+      console.warn(`   ⚠ Region extraction failed (story will proceed without bboxes): ${err.message}`);
+      regionsPath = null;
+    }
+  }
+
   // Build the prompt
   const prompt = buildPrompt({
     arxivId,
@@ -79,6 +103,7 @@ async function generateStory(arxivInput, options) {
     query: options.query,
     sourceDir: sourceResult.hasSource ? sourceResult.sourceDir : null,
     pdfPath,
+    regionsPath,
     generationDir,
   });
 
@@ -227,31 +252,6 @@ async function generateStory(arxivInput, options) {
 
   // Cleanup
   console.log(`\n📁 Generation files kept at: ${generationDir}`);
-}
-
-function validateStory(story) {
-  if (!story.id || typeof story.id !== 'string') throw new Error('Missing or invalid story.id');
-  if (!story.title || typeof story.title !== 'string') throw new Error('Missing or invalid story.title');
-  if (!Array.isArray(story.chapters) || story.chapters.length < 5) {
-    throw new Error(`Expected at least 5 chapters, got ${story.chapters?.length || 0}`);
-  }
-
-  for (const ch of story.chapters) {
-    if (!ch.id || !ch.label || !ch.explanation) {
-      throw new Error(`Chapter ${ch.id} missing required fields`);
-    }
-    if (!Array.isArray(ch.excerpts)) {
-      throw new Error(`Chapter ${ch.id} excerpts must be an array`);
-    }
-    for (const ex of ch.excerpts) {
-      if (!ex.content || !ex.type || !ex.latexSource) {
-        throw new Error(`Chapter ${ch.id} has excerpt missing content/type/latexSource`);
-      }
-      if (!['text', 'equation'].includes(ex.type)) {
-        throw new Error(`Chapter ${ch.id} has invalid excerpt type: ${ex.type}`);
-      }
-    }
-  }
 }
 
 async function publishToCache(story, slug, cacheRepoPath) {

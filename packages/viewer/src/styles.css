@@ -341,6 +341,16 @@ html, body {
   font-family: 'Fira Code', 'JetBrains Mono', monospace;
 }
 
+.excerpt-pdf-badge {
+  font-size: 10px;
+  font-weight: 600;
+  color: #7dcfff;
+  background: rgba(125, 207, 255, 0.1);
+  padding: 2px 6px;
+  border-radius: 8px;
+  font-family: 'Fira Code', 'JetBrains Mono', monospace;
+}
+
 .excerpt-content {
   padding: 16px;
 }

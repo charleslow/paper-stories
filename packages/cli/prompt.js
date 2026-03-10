@@ -5,9 +5,10 @@
  * The prompt enforces source fidelity — all excerpts must be verbatim from the paper.
  */
 
-export function buildPrompt({ arxivId, arxivUrl, query, sourceDir, pdfPath, generationDir }) {
+export function buildPrompt({ arxivId, arxivUrl, query, sourceDir, pdfPath, regionsPath, generationDir }) {
   const hasSource = !!sourceDir;
   const hasPdf = !!pdfPath;
+  const hasRegions = !!regionsPath;
 
   const sourceInstructions = hasSource
     ? `The paper's LaTeX source files are available at: ${sourceDir}
@@ -19,6 +20,12 @@ Use Glob and Read tools to explore and read them. These are your PRIMARY source 
 Use Read tool to read it. ${hasSource ? 'Use this as a SECONDARY source for figures/tables context.' : 'This is your PRIMARY source.'}`
     : '';
 
+  const regionsInstructions = hasRegions
+    ? `\nA pre-extracted PDF text regions index is available at: ${regionsPath}
+This file contains text blocks with normalized bounding boxes for every page of the PDF.
+Use this to assign \`pdfRegion\` fields to excerpts (see Stage 3 for details).`
+    : '';
+
   return `You are a Paper Stories generator. Your job is to create a deep, technically rigorous walkthrough of an ML research paper, structured as an interactive story.
 
 ## Paper
@@ -28,7 +35,7 @@ Use Read tool to read it. ${hasSource ? 'Use this as a SECONDARY source for figu
 
 ## Source Materials
 ${sourceInstructions}
-${pdfInstructions}
+${pdfInstructions}${regionsInstructions}
 
 ## Generation Directory
 Write all intermediate and final files to: ${generationDir}
@@ -103,6 +110,16 @@ For EACH excerpt you collect:
 - The equation does NOT need to be an exact string match of the source, but MUST be mathematically equivalent
 - Keep \`latexSource\` as the raw verbatim copy from the .tex file
 
+**PDF Region mapping** (if regions index is available):
+For each excerpt, find the matching text block(s) in the regions index and add a \`pdfRegion\` field:
+1. Read the regions index JSON file
+2. Search through the pages/blocks to find the block whose \`text\` best matches the excerpt's \`content\`
+3. Use substring matching — the excerpt text should appear within (or closely match) the block text
+4. Set \`pdfRegion\` to \`{ "page": <0-indexed page number>, "bbox": [x0, y0, x1, y1] }\`
+5. The bbox values are already normalized to [0, 1] range in the regions index — use them directly
+6. If multiple blocks match (e.g., excerpt spans two blocks), use the first/primary block
+7. If no match is found, omit \`pdfRegion\` for that excerpt (it's optional)
+
 Guidelines:
 - 1-3 excerpts per chapter (first and last chapters have 0)
 - Prefer excerpts that teach something concrete
@@ -162,7 +179,8 @@ Assemble everything into a single story.json file.
           "latexSource": "<Raw LaTeX source — exact verbatim copy from .tex file>",
           "type": "<text|equation>",
           "sourceFile": "<relative path to source .tex file>",
-          "label": "<e.g. 'Section 3.2' or 'Equation 5' or 'Definition 1'>"
+          "label": "<e.g. 'Section 3.2' or 'Equation 5' or 'Definition 1'>",
+          "pdfRegion": { "page": "<from regions index>", "bbox": ["<x0, y0, x1, y1 from matching block>"] }
         }
       ],
       "explanation": "<Markdown with KaTeX math. Use $...$ for inline, $$...$$ for display.>"
@@ -180,6 +198,7 @@ Assemble everything into a single story.json file.
 6. All KaTeX in explanations uses valid LaTeX syntax
 7. No hallucinated claims — everything is grounded in the paper
 8. Total chapters: 8-25 range (flexible based on query and paper length)
+9. If regions index was available, most excerpts should have a \`pdfRegion\` with valid page and bbox values
 
 Write the final story.json to ${generationDir}/story.json
 After writing, end by creating a file ${generationDir}/DONE containing just the text "DONE".
