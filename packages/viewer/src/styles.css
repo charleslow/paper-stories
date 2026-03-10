@@ -651,10 +651,11 @@ html, body {
   color: var(--accent);
 }
 
-.landing-recent {
-  margin-top: 24px;
+.landing-local {
+  margin-bottom: 24px;
 }
 
+.landing-local h3,
 .landing-recent h3 {
   font-size: 14px;
   color: var(--text-muted);
@@ -663,11 +664,13 @@ html, body {
   letter-spacing: 0.5px;
 }
 
+.landing-local ul,
 .landing-recent ul {
   list-style: none;
   padding: 0;
 }
 
+.landing-local li,
 .landing-recent li {
   display: flex;
   justify-content: space-between;
@@ -677,19 +680,27 @@ html, body {
   transition: background 0.15s;
 }
 
+.landing-local li:hover,
 .landing-recent li:hover {
   background: var(--bg-secondary);
 }
 
+.landing-local a,
 .landing-recent a {
   color: var(--text-primary);
   text-decoration: none;
   font-size: 14px;
 }
 
+.landing-local a:hover,
 .landing-recent a:hover {
   color: var(--accent);
 }
+
+.landing-recent {
+  margin-top: 24px;
+}
+
 
 .recent-arxiv {
   color: var(--text-muted);

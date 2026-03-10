@@ -22,3 +22,11 @@ export interface Story {
   createdAt: string;
   chapters: Chapter[];
 }
+
+export interface LocalStoryEntry {
+  id: string;
+  title: string;
+  arxivId: string | null;
+  createdAt: string | null;
+  url: string;
+}

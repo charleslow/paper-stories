@@ -1,4 +1,6 @@
 import { useState, useEffect } from 'react';
+import { fetchLocalStories } from '../api';
+import { LocalStoryEntry } from '../types';
 
 interface RecentStory {
   url: string;
@@ -7,15 +9,22 @@ interface RecentStory {
   accessedAt: string;
 }
 
-export default function LandingPage() {
+interface LandingPageProps {
+  onLoadStory: (url: string) => void;
+}
+
+export default function LandingPage({ onLoadStory }: LandingPageProps) {
   const [input, setInput] = useState('');
   const [recent, setRecent] = useState<RecentStory[]>([]);
+  const [localStories, setLocalStories] = useState<LocalStoryEntry[]>([]);
 
   useEffect(() => {
     try {
       const stored = JSON.parse(localStorage.getItem('paper-stories-recent') || '[]');
       setRecent(stored);
     } catch { /* ignore */ }
+
+    fetchLocalStories().then(setLocalStories);
   }, []);
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -45,10 +54,37 @@ export default function LandingPage() {
   return (
     <div className="landing-page">
       <div className="landing-container">
-        <h1 className="landing-title">📄 Paper Stories</h1>
+        <h1 className="landing-title">Paper Stories</h1>
         <p className="landing-subtitle">
           Interactive deep-dives into ML research papers
         </p>
+
+        {localStories.length > 0 && (
+          <div className="landing-local">
+            <h3>Local Stories</h3>
+            <ul>
+              {localStories.map((s) => (
+                <li key={s.id}>
+                  <a
+                    href="#"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      onLoadStory(s.url);
+                    }}
+                  >
+                    {s.title}
+                    {s.arxivId && <span className="recent-arxiv"> ({s.arxivId})</span>}
+                  </a>
+                  {s.createdAt && (
+                    <span className="recent-date">
+                      {new Date(s.createdAt).toLocaleDateString()}
+                    </span>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
 
         <form className="landing-form" onSubmit={handleSubmit}>
           <input

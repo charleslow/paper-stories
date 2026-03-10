@@ -1,4 +1,4 @@
-import { Story } from './types';
+import { Story, LocalStoryEntry } from './types';
 
 /**
  * Parse URL parameters to determine where to fetch the story from.
@@ -49,6 +49,20 @@ export async function fetchStory(url: string): Promise<Story> {
     return story as Story;
   } finally {
     clearTimeout(timeout);
+  }
+}
+
+/**
+ * Fetch local stories from the dev server discovery endpoint.
+ * Only works in local dev mode (returns empty array in production).
+ */
+export async function fetchLocalStories(): Promise<LocalStoryEntry[]> {
+  try {
+    const response = await fetch('/local-stories/_discover');
+    if (!response.ok) return [];
+    return await response.json();
+  } catch {
+    return [];
   }
 }
 

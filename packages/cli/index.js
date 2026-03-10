@@ -31,7 +31,7 @@ program
   .description('Generate a story from an arXiv paper')
   .argument('<arxiv>', 'arXiv URL or paper ID (e.g., 2401.12345)')
   .option('-q, --query <query>', 'Optional focus query for the story')
-  .option('-o, --output-dir <dir>', 'Output directory', '.')
+  .option('-o, --output-dir <dir>', 'Output directory (default: <repo-root>/stories/)')
   .option('-c, --cache-repo <path>', 'Path to code-stories-cache repo for direct publishing')
   .option('-s, --slug <slug>', 'Story slug for the output filename')
   .action(async (arxiv, options) => {
@@ -51,13 +51,18 @@ async function generateStory(arxivInput, options) {
   const arxivUrl = `https://arxiv.org/abs/${arxivId}`;
   const generationId = uuidv4();
 
+  // Default output dir: <repo-root>/stories/
+  const outputDir = options.outputDir
+    ? resolve(options.outputDir)
+    : resolve(import.meta.dirname, '..', '..', 'stories');
+
   console.log(`\n📄 Paper Stories Generator`);
   console.log(`   Paper: ${arxivUrl}`);
   console.log(`   Query: ${options.query || '(comprehensive deep-dive)'}`);
   console.log(`   Generation ID: ${generationId}\n`);
 
   // Create working directory
-  const workDir = join(resolve(options.outputDir), '.paper-stories-tmp', generationId);
+  const workDir = join(resolve('.'), '.paper-stories-tmp', generationId);
   const generationDir = join(workDir, 'generation');
   mkdirSync(generationDir, { recursive: true });
 
@@ -219,7 +224,8 @@ async function generateStory(arxivInput, options) {
   } else {
     // Copy to output directory
     const slug = options.slug || slugify(story.title);
-    const outputPath = join(resolve(options.outputDir), `${slug}.json`);
+    mkdirSync(outputDir, { recursive: true });
+    const outputPath = join(outputDir, `${slug}.json`);
     story.id = slug;
     writeFileSync(outputPath, JSON.stringify(story, null, 2));
     console.log(`\n✓ Story saved to: ${outputPath}`);

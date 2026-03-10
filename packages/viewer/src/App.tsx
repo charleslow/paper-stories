@@ -71,8 +71,20 @@ export default function App() {
     return () => window.removeEventListener('keydown', handler);
   }, [state, navigateChapter]);
 
+  const loadStoryFromUrl = useCallback((url: string) => {
+    setState({ status: 'loading', url });
+    fetchStory(url)
+      .then(story => {
+        setState({ status: 'ready', story, currentChapter: 0 });
+        saveRecent(story);
+      })
+      .catch(err => {
+        setState({ status: 'error', message: err.message });
+      });
+  }, []);
+
   if (state.status === 'landing') {
-    return <LandingPage />;
+    return <LandingPage onLoadStory={loadStoryFromUrl} />;
   }
 
   if (state.status === 'loading') {
