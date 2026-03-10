@@ -180,7 +180,7 @@ Assemble everything into a single story.json file.
           "type": "<text|equation>",
           "sourceFile": "<relative path to source .tex file>",
           "label": "<e.g. 'Section 3.2' or 'Equation 5' or 'Definition 1'>",
-          "pdfRegion": { "page": 0, "bbox": [0.1, 0.2, 0.9, 0.35] }
+          "pdfRegion": { "page": "<from regions index>", "bbox": ["<x0, y0, x1, y1 from matching block>"] }
         }
       ],
       "explanation": "<Markdown with KaTeX math. Use $...$ for inline, $$...$$ for display.>"

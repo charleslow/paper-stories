@@ -4,9 +4,9 @@ Interactive deep-dives into ML research papers. Like [Code Stories](https://char
 
 ## How it works
 
-1. **CLI** takes an arXiv URL → downloads LaTeX source + PDF → uses Claude to generate a structured walkthrough
+1. **CLI** takes an arXiv URL → downloads LaTeX source + PDF → extracts text regions with bounding boxes → uses Claude to generate a structured walkthrough with PDF locations
 2. **Viewer** (React + Vite + KaTeX) renders the story with a two-panel layout:
-   - **Left panel**: Verbatim paper excerpts (text + equations) with collapsible LaTeX source verification
+   - **Left panel**: Verbatim paper excerpts (text + equations) with collapsible LaTeX source verification and PDF page badges
    - **Right panel**: Expert explanations with inline math
 
 ## Quick start
@@ -16,7 +16,7 @@ Interactive deep-dives into ML research papers. Like [Code Stories](https://char
 ```bash
 cd packages/cli
 npm install
-node index.js generate https://arxiv.org/abs/2401.12345 --query "attention mechanism"
+node index.js generate https://arxiv.org/abs/1706.03762 --query "attention mechanism"
 ```
 
 Options:
@@ -46,18 +46,20 @@ npm run dev
 ```
 packages/
 ├── cli/           # Story generation CLI
-│   ├── index.js   # Main entry point (Commander.js)
-│   ├── arxiv.js   # arXiv source extraction
-│   └── prompt.js  # 6-stage generation prompt
+│   ├── index.js              # Main entry point (Commander.js)
+│   ├── arxiv.js              # arXiv source extraction
+│   ├── prompt.js             # 6-stage generation prompt
+│   ├── validate.js           # Story JSON validation (incl. pdfRegion)
+│   └── extract_regions.py    # PDF text block extraction with bounding boxes
 └── viewer/        # Static React viewer
     └── src/
         ├── App.tsx
         ├── api.ts               # Story fetching & validation
         ├── types.ts             # TypeScript types
         └── components/
-            ├── Sidebar.tsx      # Chapter navigation
+            ├── Sidebar.tsx          # Chapter navigation
             ├── ChapterDisplay.tsx   # Two-panel layout with splitter
-            ├── ExcerptPanel.tsx     # Paper excerpts with LaTeX source toggle
+            ├── ExcerptPanel.tsx     # Paper excerpts with LaTeX source toggle + PDF page badges
             ├── ExplanationPanel.tsx  # Markdown + KaTeX rendering
             ├── MathRenderer.tsx     # KaTeX equation rendering
             └── LandingPage.tsx      # Home / story loader
@@ -83,7 +85,8 @@ packages/
           "latexSource": "Raw \\LaTeX{} from source",
           "type": "text|equation",
           "sourceFile": "main.tex",
-          "label": "Section 3.2"
+          "label": "Section 3.2",
+          "pdfRegion": { "page": 0, "bbox": [0.1, 0.2, 0.9, 0.35] }  // optional; bbox values from region extraction
         }
       ],
       "explanation": "Markdown with $inline$ and $$display$$ math"
@@ -92,11 +95,16 @@ packages/
 }
 ```
 
+## PDF region grounding
+
+During story generation, the CLI automatically extracts text blocks with bounding boxes from the paper's PDF using PyMuPDF. Claude then matches each excerpt to its source location, adding an optional `pdfRegion` field with the 0-indexed page number and normalized `[x0, y0, x1, y1]` coordinates. The viewer displays these as page badges (e.g. "p.3") next to each excerpt. If PDF extraction fails, story generation continues gracefully without regions.
+
 ## No-hallucination guarantee
 
 Every excerpt includes:
 - `content` — cleaned text/equation for display
 - `latexSource` — raw LaTeX from the paper source (click "Show LaTeX Source" to verify)
+- `pdfRegion` — (optional) bounding box linking back to the exact PDF location
 - A verification stage in the pipeline that greps each excerpt against the source files
 
 ## Deployment

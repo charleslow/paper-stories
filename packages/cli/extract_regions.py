@@ -70,10 +70,11 @@ def extract_regions(pdf_path: str) -> dict:
             "blocks": text_blocks,
         })
 
+    total_pages = len(doc)
     doc.close()
 
     return {
-        "totalPages": len(doc),
+        "totalPages": total_pages,
         "pages": pages,
     }
 

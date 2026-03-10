@@ -61,6 +61,18 @@ describe('validateStory — pdfRegion', () => {
     })), /pdfRegion\.page/);
   });
 
+  it('rejects inverted bbox (x0 >= x1 or y0 >= y1)', () => {
+    assert.throws(() => validateStory(makeStory({}, {}, {
+      pdfRegion: { page: 0, bbox: [0.9, 0.2, 0.1, 0.35] },
+    })), /inverted pdfRegion\.bbox/);
+    assert.throws(() => validateStory(makeStory({}, {}, {
+      pdfRegion: { page: 0, bbox: [0.1, 0.8, 0.9, 0.35] },
+    })), /inverted pdfRegion\.bbox/);
+    assert.throws(() => validateStory(makeStory({}, {}, {
+      pdfRegion: { page: 0, bbox: [0.5, 0.2, 0.5, 0.35] },
+    })), /inverted pdfRegion\.bbox/);
+  });
+
   it('rejects invalid bbox', () => {
     assert.throws(() => validateStory(makeStory({}, {}, {
       pdfRegion: { page: 0, bbox: [0.1, 0.2, 1.5, 0.35] },

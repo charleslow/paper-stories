@@ -30,6 +30,10 @@ export function validateStory(story) {
         if (!Array.isArray(bbox) || bbox.length !== 4 || bbox.some(v => typeof v !== 'number' || v < 0 || v > 1)) {
           throw new Error(`Chapter ${ch.id} has excerpt with invalid pdfRegion.bbox (must be 4 numbers in [0,1])`);
         }
+        const [x0, y0, x1, y1] = bbox;
+        if (x0 >= x1 || y0 >= y1) {
+          throw new Error(`Chapter ${ch.id} has excerpt with inverted pdfRegion.bbox (need x0 < x1 and y0 < y1)`);
+        }
       }
     }
   }
