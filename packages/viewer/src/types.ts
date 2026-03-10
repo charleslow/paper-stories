@@ -9,8 +9,7 @@ export interface Excerpt {
   type: 'text' | 'equation';
   sourceFile: string;
   label: string;
-  pdfRegion?: PdfRegion;       // Optional PDF bounding box for the excerpt
-  pdfRegionImage?: string;     // Base64-encoded PNG of the cropped PDF region
+  pdfRegion?: PdfRegion;  // Optional PDF bounding box for the excerpt
 }
 
 export interface Chapter {

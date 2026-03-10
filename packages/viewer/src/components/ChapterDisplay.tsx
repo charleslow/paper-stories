@@ -8,6 +8,7 @@ interface ChapterDisplayProps {
   chapterIndex: number;
   totalChapters: number;
   onNavigate: (index: number) => void;
+  regionsBaseUrl: string;
   storyMeta: {
     title: string;
     arxivId: string;
@@ -21,6 +22,7 @@ export default function ChapterDisplay({
   chapterIndex,
   totalChapters,
   onNavigate,
+  regionsBaseUrl,
   storyMeta,
 }: ChapterDisplayProps) {
   const [splitPercent, setSplitPercent] = useState(40);
@@ -108,7 +110,7 @@ export default function ChapterDisplay({
       {isMobile ? (
         <div className="chapter-panels-mobile">
           {activeTab === 'excerpts' ? (
-            <ExcerptPanel excerpts={chapter.excerpts} storyMeta={storyMeta} />
+            <ExcerptPanel excerpts={chapter.excerpts} chapterId={chapter.id} regionsBaseUrl={regionsBaseUrl} storyMeta={storyMeta} />
           ) : (
             <ExplanationPanel explanation={chapter.explanation} />
           )}
@@ -116,7 +118,7 @@ export default function ChapterDisplay({
       ) : (
         <div className={`chapter-panels ${isDragging ? 'dragging' : ''}`}>
           <div className="panel-left" style={{ width: `${splitPercent}%` }}>
-            <ExcerptPanel excerpts={chapter.excerpts} storyMeta={storyMeta} />
+            <ExcerptPanel excerpts={chapter.excerpts} chapterId={chapter.id} regionsBaseUrl={regionsBaseUrl} storyMeta={storyMeta} />
           </div>
           <div
             className="panel-splitter"

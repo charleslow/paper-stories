@@ -52,6 +52,14 @@ export async function fetchStory(url: string): Promise<Story> {
   }
 }
 
+/**
+ * Derive the base URL for region images from the story URL.
+ * e.g. "https://...stories/foo.json" -> "https://...stories/foo/regions/"
+ */
+export function regionsBaseUrl(storyUrl: string): string {
+  return storyUrl.replace(/\.json$/, '/regions/');
+}
+
 function validateStory(data: unknown): asserts data is Story {
   const story = data as Record<string, unknown>;
 

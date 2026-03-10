@@ -6,41 +6,43 @@
 # ///
 
 """
-Render cropped PDF regions for story excerpts as base64 PNGs.
+Render cropped PDF regions for story excerpts as PNG files.
 
 Takes a PDF and a story JSON, finds each excerpt with a pdfRegion,
-renders the cropped bounding box from the PDF page, and writes the
-base64-encoded PNG into the excerpt's pdfRegionImage field.
+renders the cropped bounding box from the PDF page, and saves it
+as a PNG file in the output directory.
+
+Output files are named by chapter ID: {chapter_id}.png
 
 Usage:
-    uv run render_regions.py <pdf_path> <story_json_path> [-o output_path] [--dpi 150] [--padding 0.02]
+    uv run render_regions.py <pdf_path> <story_json_path> -o <output_dir> [--dpi 150] [--padding 0.02]
 """
 
 import argparse
-import base64
-import io
 import json
+import os
 import sys
 
 import pymupdf
 
 
 def render_region(doc: pymupdf.Document, page_num: int, bbox: list[float],
-                  dpi: int = 150, padding: float = 0.02) -> str:
-    """Render a cropped region of a PDF page as a base64-encoded PNG.
+                  output_path: str, dpi: int = 150, padding: float = 0.02) -> bool:
+    """Render a cropped region of a PDF page to a PNG file.
 
     Args:
         doc: Open PyMuPDF document.
         page_num: 0-indexed page number.
         bbox: Normalized [x0, y0, x1, y1] in [0, 1].
+        output_path: Path to write the PNG file.
         dpi: Render resolution.
         padding: Extra padding around the bbox as a fraction of page dimensions.
 
     Returns:
-        Base64-encoded PNG string (no data URI prefix).
+        True if the image was written successfully.
     """
     if page_num < 0 or page_num >= len(doc):
-        return ""
+        return False
 
     page = doc[page_num]
     pw, ph = page.rect.width, page.rect.height
@@ -60,20 +62,22 @@ def render_region(doc: pymupdf.Document, page_num: int, bbox: list[float],
     matrix = pymupdf.Matrix(zoom, zoom)
     pix = page.get_pixmap(matrix=matrix, clip=clip)
 
-    img_bytes = pix.tobytes("png")
-    return base64.b64encode(img_bytes).decode("ascii")
+    pix.save(output_path)
+    return True
 
 
-def add_region_images(pdf_path: str, story_path: str, output_path: str | None = None,
-                      dpi: int = 150, padding: float = 0.02) -> None:
-    """Add pdfRegionImage fields to excerpts in a story JSON."""
+def render_all_regions(pdf_path: str, story_path: str, output_dir: str,
+                       dpi: int = 150, padding: float = 0.02) -> int:
+    """Render cropped PDF regions for all excerpts in a story."""
     with open(story_path) as f:
         story = json.load(f)
 
+    os.makedirs(output_dir, exist_ok=True)
     doc = pymupdf.open(pdf_path)
     count = 0
 
     for chapter in story.get("chapters", []):
+        chapter_id = chapter.get("id", "")
         for excerpt in chapter.get("excerpts", []):
             region = excerpt.get("pdfRegion")
             if not region:
@@ -84,31 +88,26 @@ def add_region_images(pdf_path: str, story_path: str, output_path: str | None = 
             if page is None or not bbox or len(bbox) != 4:
                 continue
 
-            b64 = render_region(doc, page, bbox, dpi=dpi, padding=padding)
-            if b64:
-                excerpt["pdfRegionImage"] = b64
+            out_path = os.path.join(output_dir, f"{chapter_id}.png")
+            if render_region(doc, page, bbox, out_path, dpi=dpi, padding=padding):
                 count += 1
 
     doc.close()
-
-    out = output_path or story_path
-    with open(out, "w") as f:
-        json.dump(story, f, indent=2)
-
-    print(f"Added {count} region images to {out}", file=sys.stderr)
+    print(f"Rendered {count} region images to {output_dir}", file=sys.stderr)
+    return count
 
 
 def main():
     parser = argparse.ArgumentParser(description="Render cropped PDF regions for story excerpts")
     parser.add_argument("pdf_path", help="Path to the PDF file")
     parser.add_argument("story_path", help="Path to the story JSON file")
-    parser.add_argument("-o", "--output", help="Output path (defaults to overwriting story_path)")
+    parser.add_argument("-o", "--output-dir", required=True, help="Output directory for PNG files")
     parser.add_argument("--dpi", type=int, default=150, help="Resolution (default: 150)")
     parser.add_argument("--padding", type=float, default=0.02,
                         help="Padding around bbox as fraction of page (default: 0.02)")
     args = parser.parse_args()
 
-    add_region_images(args.pdf_path, args.story_path, args.output, args.dpi, args.padding)
+    render_all_regions(args.pdf_path, args.story_path, args.output_dir, args.dpi, args.padding)
 
 
 if __name__ == "__main__":
