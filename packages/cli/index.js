@@ -12,7 +12,7 @@
 
 import { Command } from 'commander';
 import { spawn, execFileSync } from 'child_process';
-import { mkdirSync, existsSync, readFileSync, writeFileSync, cpSync, unlinkSync } from 'fs';
+import { mkdirSync, existsSync, readFileSync, writeFileSync, unlinkSync } from 'fs';
 import { join, resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { v4 as uuidv4 } from 'uuid';
@@ -237,47 +237,24 @@ async function generateStory(arxivInput, options) {
 
   spinner.succeed(`Story generated: "${story.title}" (${story.chapters.length} chapters)`);
 
-  // Render cropped PDF regions as PNG files
-  const regionsDir = join(generationDir, 'regions');
-  if (pdfPath) {
-    const regionSpinner = ora({ text: 'Rendering PDF region images...', color: 'cyan' }).start();
-    const renderRegionsScript = join(__dirname, 'render_regions.py');
-    try {
-      execFileSync('uv', ['run', renderRegionsScript, pdfPath, storyPath, '-o', regionsDir], {
-        stdio: ['pipe', 'pipe', 'pipe'],
-      });
-      regionSpinner.succeed('Rendered PDF region images');
-    } catch (err) {
-      regionSpinner.warn(`PDF region rendering failed (story will proceed without images): ${err.message}`);
-    }
-  }
-
   // Publish to cache repo if specified
   if (options.cacheRepo) {
     const slug = options.slug || slugify(story.title);
-    await publishToCache(story, slug, options.cacheRepo, regionsDir);
+    await publishToCache(story, slug, options.cacheRepo);
   } else {
     // Copy to output directory
     const slug = options.slug || slugify(story.title);
     const outputPath = join(resolve(options.outputDir), `${slug}.json`);
     story.id = slug;
     writeFileSync(outputPath, JSON.stringify(story, null, 2));
-    // Copy region images alongside the story
-    const outputRegionsDir = join(resolve(options.outputDir), slug, 'regions');
-    if (existsSync(regionsDir)) {
-      cpSync(regionsDir, outputRegionsDir, { recursive: true });
-      console.log(`\n✓ Story saved to: ${outputPath}`);
-      console.log(`✓ Region images saved to: ${outputRegionsDir}`);
-    } else {
-      console.log(`\n✓ Story saved to: ${outputPath}`);
-    }
+    console.log(`\n✓ Story saved to: ${outputPath}`);
   }
 
   // Cleanup
   console.log(`\n📁 Generation files kept at: ${generationDir}`);
 }
 
-async function publishToCache(story, slug, cacheRepoPath, regionsDir) {
+async function publishToCache(story, slug, cacheRepoPath) {
   const storiesDir = join(cacheRepoPath, 'stories');
   if (!existsSync(storiesDir)) {
     throw new Error(`Cache repo stories directory not found: ${storiesDir}`);
@@ -289,13 +266,6 @@ async function publishToCache(story, slug, cacheRepoPath, regionsDir) {
   // Write story file
   const storyPath = join(storiesDir, `${slug}.json`);
   writeFileSync(storyPath, JSON.stringify(story, null, 2));
-
-  // Copy region images
-  if (regionsDir && existsSync(regionsDir)) {
-    const cacheRegionsDir = join(storiesDir, slug, 'regions');
-    cpSync(regionsDir, cacheRegionsDir, { recursive: true });
-    console.log(`✓ Region images published to: ${cacheRegionsDir}`);
-  }
 
   // Update manifest
   const manifestPath = join(storiesDir, 'manifest.json');

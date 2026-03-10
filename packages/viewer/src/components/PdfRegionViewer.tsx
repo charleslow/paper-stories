@@ -1,0 +1,122 @@
+import { useEffect, useRef, useState, useCallback } from 'react';
+import * as pdfjsLib from 'pdfjs-dist';
+import pdfjsWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
+
+pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorkerUrl;
+
+// Cache loaded PDF documents by URL
+const docCache = new Map<string, Promise<pdfjsLib.PDFDocumentProxy>>();
+
+function getPdfDocument(url: string): Promise<pdfjsLib.PDFDocumentProxy> {
+  let cached = docCache.get(url);
+  if (!cached) {
+    cached = pdfjsLib.getDocument(url).promise;
+    docCache.set(url, cached);
+  }
+  return cached;
+}
+
+interface PdfRegionViewerProps {
+  pdfUrl: string;
+  page: number;         // 0-indexed
+  bbox: [number, number, number, number]; // Normalized [x0, y0, x1, y1]
+}
+
+const DEFAULT_SCALE = 1.5;
+const MIN_SCALE = 0.5;
+const MAX_SCALE = 4;
+const SCALE_STEP = 0.25;
+
+export default function PdfRegionViewer({ pdfUrl, page, bbox }: PdfRegionViewerProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const highlightRef = useRef<HTMLDivElement>(null);
+  const [scale, setScale] = useState(DEFAULT_SCALE);
+  const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
+
+  const renderPage = useCallback(async (currentScale: number) => {
+    const canvas = canvasRef.current;
+    const container = containerRef.current;
+    const highlight = highlightRef.current;
+    if (!canvas || !container || !highlight) return;
+
+    try {
+      setStatus('loading');
+      const doc = await getPdfDocument(pdfUrl);
+      const pdfPage = await doc.getPage(page + 1); // pdf.js uses 1-indexed
+      const viewport = pdfPage.getViewport({ scale: currentScale });
+
+      canvas.width = viewport.width;
+      canvas.height = viewport.height;
+
+      await pdfPage.render({
+        canvasContext: canvas.getContext('2d')!,
+        viewport,
+      }).promise;
+
+      // Position highlight overlay
+      const [x0, y0, x1, y1] = bbox;
+      highlight.style.left = `${x0 * viewport.width}px`;
+      highlight.style.top = `${y0 * viewport.height}px`;
+      highlight.style.width = `${(x1 - x0) * viewport.width}px`;
+      highlight.style.height = `${(y1 - y0) * viewport.height}px`;
+
+      // Scroll to center the bbox region
+      const bboxCenterY = ((y0 + y1) / 2) * viewport.height;
+      const containerHeight = container.clientHeight;
+      container.scrollTop = Math.max(0, bboxCenterY - containerHeight / 2);
+
+      const bboxCenterX = ((x0 + x1) / 2) * viewport.width;
+      const containerWidth = container.clientWidth;
+      if (viewport.width > containerWidth) {
+        container.scrollLeft = Math.max(0, bboxCenterX - containerWidth / 2);
+      }
+
+      setStatus('ready');
+    } catch {
+      setStatus('error');
+    }
+  }, [pdfUrl, page, bbox]);
+
+  useEffect(() => {
+    renderPage(scale);
+  }, [scale, renderPage]);
+
+  const zoomIn = () => setScale(s => Math.min(MAX_SCALE, s + SCALE_STEP));
+  const zoomOut = () => setScale(s => Math.max(MIN_SCALE, s - SCALE_STEP));
+  const resetZoom = () => setScale(DEFAULT_SCALE);
+
+  if (status === 'error') {
+    return (
+      <div className="pdf-region-viewer pdf-region-error">
+        <span>Failed to load PDF page</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="pdf-region-viewer">
+      <div className="pdf-region-toolbar">
+        <span className="pdf-region-label">PDF — page {page + 1}</span>
+        <div className="pdf-region-zoom">
+          <button onClick={zoomOut} disabled={scale <= MIN_SCALE} title="Zoom out">−</button>
+          <button onClick={resetZoom} className="pdf-region-zoom-level" title="Reset zoom">
+            {Math.round(scale * 100)}%
+          </button>
+          <button onClick={zoomIn} disabled={scale >= MAX_SCALE} title="Zoom in">+</button>
+        </div>
+      </div>
+      <div className="pdf-region-scroll" ref={containerRef}>
+        {status === 'loading' && (
+          <div className="pdf-region-loading">
+            <div className="loading-spinner" />
+          </div>
+        )}
+        <div className="pdf-region-canvas-wrapper">
+          <canvas ref={canvasRef} />
+          <div ref={highlightRef} className="pdf-region-highlight" />
+        </div>
+      </div>
+    </div>
+  );
+}

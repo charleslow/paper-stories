@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Story } from './types';
-import { parseStoryUrl, fetchStory, regionsBaseUrl } from './api';
+import { parseStoryUrl, fetchStory } from './api';
 import Sidebar from './components/Sidebar';
 import ChapterDisplay from './components/ChapterDisplay';
 import LandingPage from './components/LandingPage';
@@ -9,7 +9,7 @@ type AppState =
   | { status: 'landing' }
   | { status: 'loading'; url: string }
   | { status: 'error'; message: string }
-  | { status: 'ready'; story: Story; currentChapter: number; regionsUrl: string };
+  | { status: 'ready'; story: Story; currentChapter: number };
 
 export default function App() {
   const [state, setState] = useState<AppState>({ status: 'landing' });
@@ -20,7 +20,7 @@ export default function App() {
       setState({ status: 'loading', url: storyUrl });
       fetchStory(storyUrl)
         .then(story => {
-          setState({ status: 'ready', story, currentChapter: 0, regionsUrl: regionsBaseUrl(storyUrl) });
+          setState({ status: 'ready', story, currentChapter: 0 });
           saveRecent(story);
         })
         .catch(err => {
@@ -94,7 +94,7 @@ export default function App() {
     );
   }
 
-  const { story, currentChapter, regionsUrl } = state;
+  const { story, currentChapter } = state;
   const chapter = story.chapters[currentChapter];
 
   return (
@@ -111,7 +111,7 @@ export default function App() {
         chapterIndex={currentChapter}
         totalChapters={story.chapters.length}
         onNavigate={navigateChapter}
-        regionsBaseUrl={regionsUrl}
+        pdfUrl={story.pdfUrl}
         storyMeta={{
           title: story.title,
           arxivId: story.arxivId,

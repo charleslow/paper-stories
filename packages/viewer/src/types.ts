@@ -24,6 +24,7 @@ export interface Story {
   title: string;
   arxivId: string;
   arxivUrl: string;
+  pdfUrl?: string;
   query: string | null;
   createdAt: string;
   chapters: Chapter[];

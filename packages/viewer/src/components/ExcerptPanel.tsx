@@ -1,11 +1,11 @@
 import { useState } from 'react';
 import { Excerpt } from '../types';
 import MathRenderer from './MathRenderer';
+import PdfRegionViewer from './PdfRegionViewer';
 
 interface ExcerptPanelProps {
   excerpts: Excerpt[];
-  chapterId?: string;
-  regionsBaseUrl?: string;
+  pdfUrl?: string;
   storyMeta?: {
     title: string;
     arxivId: string;
@@ -14,7 +14,7 @@ interface ExcerptPanelProps {
   };
 }
 
-export default function ExcerptPanel({ excerpts, chapterId, regionsBaseUrl, storyMeta }: ExcerptPanelProps) {
+export default function ExcerptPanel({ excerpts, pdfUrl, storyMeta }: ExcerptPanelProps) {
   if (excerpts.length === 0) {
     // Overview/summary chapter — show metadata
     return (
@@ -42,25 +42,17 @@ export default function ExcerptPanel({ excerpts, chapterId, regionsBaseUrl, stor
     );
   }
 
-  // Build region image URL: {regionsBaseUrl}{chapterId}.png
-  const regionImageUrl = chapterId && regionsBaseUrl
-    ? `${regionsBaseUrl}${chapterId}.png`
-    : undefined;
-
   return (
     <div className="excerpt-panel">
       {excerpts.map((excerpt, i) => (
-        <ExcerptCard key={i} excerpt={excerpt} regionImageUrl={regionImageUrl} />
+        <ExcerptCard key={i} excerpt={excerpt} pdfUrl={pdfUrl} />
       ))}
     </div>
   );
 }
 
-function ExcerptCard({ excerpt, regionImageUrl }: { excerpt: Excerpt; regionImageUrl?: string }) {
+function ExcerptCard({ excerpt, pdfUrl }: { excerpt: Excerpt; pdfUrl?: string }) {
   const [showSource, setShowSource] = useState(false);
-  const [imageError, setImageError] = useState(false);
-
-  const showRegionImage = !!regionImageUrl && !!excerpt.pdfRegion && !imageError;
 
   return (
     <div className={`excerpt-card excerpt-type-${excerpt.type}`}>
@@ -87,19 +79,12 @@ function ExcerptCard({ excerpt, regionImageUrl }: { excerpt: Excerpt; regionImag
         )}
       </div>
 
-      {showRegionImage && (
-        <div className="excerpt-pdf-region">
-          <div className="excerpt-pdf-region-label">
-            PDF — page {excerpt.pdfRegion!.page + 1}
-          </div>
-          <img
-            src={regionImageUrl}
-            alt={`PDF region for ${excerpt.label || 'excerpt'}`}
-            className="excerpt-pdf-region-img"
-            loading="lazy"
-            onError={() => setImageError(true)}
-          />
-        </div>
+      {pdfUrl && excerpt.pdfRegion && (
+        <PdfRegionViewer
+          pdfUrl={pdfUrl}
+          page={excerpt.pdfRegion.page}
+          bbox={excerpt.pdfRegion.bbox}
+        />
       )}
 
       <button
