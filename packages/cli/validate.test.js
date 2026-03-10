@@ -18,10 +18,19 @@ function makeStory(overrides = {}, chapterOverrides = {}, excerptOverrides = {})
     excerpts: [excerpt],
     ...chapterOverrides,
   };
+  // First and last chapters must have 0 excerpts; middle chapters exactly 1
+  const chapters = Array.from({ length: 5 }, (_, i) => {
+    const isFirstOrLast = i === 0 || i === 4;
+    return {
+      ...chapter,
+      id: `ch-${i + 1}`,
+      excerpts: isFirstOrLast ? [] : [{ ...excerpt, ...excerptOverrides }],
+    };
+  });
   return {
     id: 'test-story',
     title: 'Test Story',
-    chapters: Array.from({ length: 5 }, (_, i) => ({ ...chapter, id: `ch-${i + 1}` })),
+    chapters,
     ...overrides,
   };
 }

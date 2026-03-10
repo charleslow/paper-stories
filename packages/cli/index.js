@@ -237,6 +237,25 @@ async function generateStory(arxivInput, options) {
 
   spinner.succeed(`Story generated: "${story.title}" (${story.chapters.length} chapters)`);
 
+  // Render cropped PDF regions as base64 images
+  if (pdfPath) {
+    const regionSpinner = ora({ text: 'Rendering PDF region images...', color: 'cyan' }).start();
+    const renderRegionsScript = join(__dirname, 'render_regions.py');
+    try {
+      execFileSync('uv', ['run', renderRegionsScript, pdfPath, storyPath], {
+        stdio: ['pipe', 'pipe', 'pipe'],
+      });
+      // Re-read the story with images added
+      story = JSON.parse(readFileSync(storyPath, 'utf8'));
+      const imageCount = story.chapters
+        .flatMap(ch => ch.excerpts)
+        .filter(ex => ex.pdfRegionImage).length;
+      regionSpinner.succeed(`Added ${imageCount} PDF region images`);
+    } catch (err) {
+      regionSpinner.warn(`PDF region rendering failed (story will proceed without images): ${err.message}`);
+    }
+  }
+
   // Publish to cache repo if specified
   if (options.cacheRepo) {
     const slug = options.slug || slugify(story.title);

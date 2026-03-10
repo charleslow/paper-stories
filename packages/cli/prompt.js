@@ -121,7 +121,7 @@ For each excerpt, find the matching text block(s) in the regions index and add a
 7. If no match is found, omit \`pdfRegion\` for that excerpt (it's optional)
 
 Guidelines:
-- 1-3 excerpts per chapter (first and last chapters have 0)
+- Exactly 1 excerpt per chapter (first and last chapters have 0 excerpts)
 - Prefer excerpts that teach something concrete
 - For text, include enough context to be meaningful (2-6 sentences)
 
@@ -193,6 +193,7 @@ Assemble everything into a single story.json file.
 1. Every excerpt.latexSource exists verbatim in the source files
 2. Every excerpt has a non-empty latexSource field
 3. First chapter (Overview) and last chapter (Summary) have \`excerpts: []\`
+3b. All other chapters have exactly 1 excerpt
 4. Chapter labels are 2-4 words
 5. Chapter IDs are sequential: chapter-0, chapter-1, ...
 6. All KaTeX in explanations uses valid LaTeX syntax

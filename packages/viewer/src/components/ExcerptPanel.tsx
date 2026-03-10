@@ -77,6 +77,19 @@ function ExcerptCard({ excerpt }: { excerpt: Excerpt }) {
         )}
       </div>
 
+      {excerpt.pdfRegionImage && (
+        <div className="excerpt-pdf-region">
+          <div className="excerpt-pdf-region-label">
+            PDF{excerpt.pdfRegion ? ` — page ${excerpt.pdfRegion.page + 1}` : ''}
+          </div>
+          <img
+            src={`data:image/png;base64,${excerpt.pdfRegionImage}`}
+            alt={`PDF region for ${excerpt.label || 'excerpt'}`}
+            className="excerpt-pdf-region-img"
+          />
+        </div>
+      )}
+
       <button
         className="excerpt-source-toggle"
         onClick={() => setShowSource(!showSource)}

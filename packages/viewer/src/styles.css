@@ -377,6 +377,28 @@ html, body {
   margin: 0;
 }
 
+/* PDF region image */
+.excerpt-pdf-region {
+  border-top: 1px solid var(--border-light);
+  background: var(--source-bg);
+}
+
+.excerpt-pdf-region-label {
+  padding: 6px 14px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #7dcfff;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.excerpt-pdf-region-img {
+  display: block;
+  width: 100%;
+  height: auto;
+  padding: 0 14px 14px;
+}
+
 /* Source toggle */
 .excerpt-source-toggle {
   display: block;
