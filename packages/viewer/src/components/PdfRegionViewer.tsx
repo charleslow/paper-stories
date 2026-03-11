@@ -4,15 +4,34 @@ import pdfjsWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorkerUrl;
 
-// Cache loaded PDF documents by URL
+// Cache loaded PDF documents by URL (LRU, capped at MAX_CACHED_DOCS)
+const MAX_CACHED_DOCS = 5;
 const docCache = new Map<string, Promise<pdfjsLib.PDFDocumentProxy>>();
 
 function getPdfDocument(url: string): Promise<pdfjsLib.PDFDocumentProxy> {
   let cached = docCache.get(url);
-  if (!cached) {
-    cached = pdfjsLib.getDocument(url).promise;
+  if (cached) {
+    // Move to end so the most-recently-used entry is last (LRU order)
+    docCache.delete(url);
     docCache.set(url, cached);
+    return cached;
   }
+
+  cached = pdfjsLib.getDocument(url).promise;
+  cached.catch(() => {
+    // Remove rejected promises so subsequent calls can retry
+    docCache.delete(url);
+  });
+  docCache.set(url, cached);
+
+  // Evict oldest entries when cache exceeds the cap
+  while (docCache.size > MAX_CACHED_DOCS) {
+    const oldest = docCache.keys().next().value!;
+    const evicted = docCache.get(oldest)!;
+    docCache.delete(oldest);
+    evicted.then(doc => doc.destroy()).catch(() => {});
+  }
+
   return cached;
 }
 
