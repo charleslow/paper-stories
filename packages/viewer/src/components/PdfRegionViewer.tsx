@@ -75,6 +75,7 @@ export default function PdfRegionViewer({ pdfUrl, page, bbox }: PdfRegionViewerP
       await pdfPage.render({
         canvasContext: ctx,
         viewport,
+        canvas,
       }).promise;
 
       // Position highlight overlay
