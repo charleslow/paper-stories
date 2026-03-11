@@ -7,7 +7,7 @@ import type { ServerResponse } from 'http'
 
 // Shared middleware for serving local stories (works in both dev and preview)
 function localStoriesMiddleware(req: Connect.IncomingMessage, res: ServerResponse, next: Connect.NextFunction) {
-  const storiesDir = path.resolve(__dirname, 'dist/stories')
+  const storiesDir = path.resolve(__dirname, 'stories')
 
   handleRequest(req, res, next, storiesDir).catch(next)
 }
