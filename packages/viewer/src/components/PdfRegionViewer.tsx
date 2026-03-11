@@ -54,6 +54,15 @@ export default function PdfRegionViewer({ pdfUrl, page, bbox }: PdfRegionViewerP
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [x0, y0, x1, y1] = bbox;
 
+  // IMPORTANT: pdfjs-dist v5 render() pitfalls
+  // 1. Pass `canvas` (the element), NOT `canvasContext`. The `canvasContext`
+  //    parameter is deprecated — pdf.js ignores it when `canvas` is provided
+  //    and obtains its own 2D context internally.
+  // 2. Each render() registers the canvas in an internal #canvasInUse set.
+  //    Starting a second render on the same canvas before the first completes
+  //    throws "Cannot use the same canvas during multiple render() operations."
+  //    Always cancel the previous RenderTask in the effect cleanup to avoid this
+  //    (especially important with React StrictMode, which double-fires effects).
   useEffect(() => {
     const canvas = canvasRef.current;
     const container = containerRef.current;
