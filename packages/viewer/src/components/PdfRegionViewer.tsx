@@ -52,6 +52,7 @@ export default function PdfRegionViewer({ pdfUrl, page, bbox }: PdfRegionViewerP
   const highlightRef = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(DEFAULT_SCALE);
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [x0, y0, x1, y1] = bbox;
 
   const renderPage = useCallback(async (currentScale: number) => {
     const canvas = canvasRef.current;
@@ -74,7 +75,6 @@ export default function PdfRegionViewer({ pdfUrl, page, bbox }: PdfRegionViewerP
       }).promise;
 
       // Position highlight overlay
-      const [x0, y0, x1, y1] = bbox;
       highlight.style.left = `${x0 * viewport.width}px`;
       highlight.style.top = `${y0 * viewport.height}px`;
       highlight.style.width = `${(x1 - x0) * viewport.width}px`;
@@ -95,7 +95,7 @@ export default function PdfRegionViewer({ pdfUrl, page, bbox }: PdfRegionViewerP
     } catch {
       setStatus('error');
     }
-  }, [pdfUrl, page, bbox]);
+  }, [pdfUrl, page, x0, y0, x1, y1]);
 
   useEffect(() => {
     renderPage(scale);
