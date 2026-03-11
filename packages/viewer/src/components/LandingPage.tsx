@@ -83,9 +83,9 @@ export default function LandingPage() {
                     {story.title}
                     {story.arxivId && <span className="recent-arxiv"> ({story.arxivId})</span>}
                   </a>
-                  {story.createdAt && (
+                  {(story.modifiedAt || story.createdAt) && (
                     <span className="recent-date">
-                      {new Date(story.createdAt).toLocaleDateString()}
+                      {new Date((story.modifiedAt || story.createdAt)!).toLocaleDateString()}
                     </span>
                   )}
                 </li>

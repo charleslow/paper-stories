@@ -20,16 +20,23 @@ async function handleRequest(req: Connect.IncomingMessage, res: ServerResponse, 
       const files = allFiles.filter(f => f.endsWith('.json') && f !== 'manifest.json')
       const stories = (await Promise.all(files.map(async (f) => {
         try {
-          const data = JSON.parse(await fs.readFile(path.join(storiesDir, f), 'utf-8'))
+          const filePath = path.join(storiesDir, f)
+          const [data, stat] = await Promise.all([
+            fs.readFile(filePath, 'utf-8').then(JSON.parse),
+            fs.stat(filePath),
+          ])
           return {
             id: data.id || f.replace('.json', ''),
             title: data.title || f.replace('.json', ''),
             arxivId: data.arxivId || null,
             createdAt: data.createdAt || null,
+            modifiedAt: stat.mtime.toISOString(),
             url: `local-stories/${f}`,
           }
         } catch { return null }
       }))).filter(Boolean)
+      // Sort by most recently modified first
+      stories.sort((a: any, b: any) => new Date(b.modifiedAt).getTime() - new Date(a.modifiedAt).getTime())
       res.setHeader('Content-Type', 'application/json')
       res.end(JSON.stringify(stories))
     } catch {
