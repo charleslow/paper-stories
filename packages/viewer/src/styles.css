@@ -377,6 +377,16 @@ html, body {
   margin: 0;
 }
 
+/* Figure excerpts */
+.excerpt-type-figure .excerpt-caption {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+  padding: 0;
+  margin: 0;
+  font-style: italic;
+}
+
 /* PDF Region Viewer */
 .pdf-region-viewer {
   border-top: 1px solid var(--border-light);

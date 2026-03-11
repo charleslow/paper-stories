@@ -21,8 +21,9 @@ Use Read tool to read it. ${hasSource ? 'Use this as a SECONDARY source for figu
     : '';
 
   const regionsInstructions = hasRegions
-    ? `\nA pre-extracted PDF text regions index is available at: ${regionsPath}
-This file contains text blocks with normalized bounding boxes for every page of the PDF.
+    ? `\nA pre-extracted PDF regions index is available at: ${regionsPath}
+This file contains text blocks and image blocks with normalized bounding boxes for every page of the PDF.
+Each block has a \`type\` field: "text" (with a \`text\` field) or "image" (bounding box only — for embedded figures/charts/diagrams).
 Use this to assign \`pdfRegion\` fields to excerpts (see Stage 3 for details).`
     : '';
 
@@ -93,6 +94,7 @@ For each chapter, find and collect excerpts from the source:
 Each excerpt should be one of:
 - **text**: A key paragraph, definition, or claim from the paper
 - **equation**: A mathematical equation or formula
+- **figure**: A diagram, chart, table, or illustration from the paper
 
 For EACH excerpt you collect:
 1. Read the source .tex file containing it
@@ -110,15 +112,22 @@ For EACH excerpt you collect:
 - The equation does NOT need to be an exact string match of the source, but MUST be mathematically equivalent
 - Keep \`latexSource\` as the raw verbatim copy from the .tex file
 
+**Figure excerpts**: For diagrams, charts, tables, and illustrations:
+- \`content\` should be the figure's caption text (cleaned of LaTeX artifacts, like text excerpts)
+- \`latexSource\` should be the raw \\begin{figure}...\\end{figure} (or \\begin{table}...\\end{table}) block from the .tex file
+- \`label\` should be e.g. "Figure 1" or "Table 2"
+- \`pdfRegion\` is especially important for figures — match against "image" type blocks in the regions index (see below)
+
 **PDF Region mapping** (if regions index is available):
-For each excerpt, find the matching text block(s) in the regions index and add a \`pdfRegion\` field:
+For each excerpt, find the matching block(s) in the regions index and add a \`pdfRegion\` field:
 1. Read the regions index JSON file
-2. Search through the pages/blocks to find the block whose \`text\` best matches the excerpt's \`content\`
-3. Use substring matching — the excerpt text should appear within (or closely match) the block text
+2. For **text/equation excerpts**: search for blocks with \`type: "text"\` whose \`text\` best matches the excerpt's \`content\` (substring matching)
+3. For **figure excerpts**: search for blocks with \`type: "image"\` on the same page as the figure's caption. Match the image block nearest to (typically just above) the caption text block.
 4. Set \`pdfRegion\` to \`{ "page": <0-indexed page number>, "bbox": [x0, y0, x1, y1] }\`
 5. The bbox values are already normalized to [0, 1] range in the regions index — use them directly
 6. If multiple blocks match (e.g., excerpt spans two blocks), use the first/primary block
 7. If no match is found, omit \`pdfRegion\` for that excerpt (it's optional)
+8. Some figures use vector graphics rather than embedded images — these won't appear as image blocks. That's fine, just omit \`pdfRegion\` for those.
 
 Guidelines:
 - Exactly 1 excerpt per chapter (first and last chapters have 0 excerpts)
@@ -177,7 +186,7 @@ Assemble everything into a single story.json file.
         {
           "content": "<KaTeX-renderable content: clean text for text excerpts, KaTeX-compatible LaTeX for equations>",
           "latexSource": "<Raw LaTeX source — exact verbatim copy from .tex file>",
-          "type": "<text|equation>",
+          "type": "<text|equation|figure>",
           "sourceFile": "<relative path to source .tex file>",
           "label": "<e.g. 'Section 3.2' or 'Equation 5' or 'Definition 1'>",
           "pdfRegion": { "page": "<from regions index>", "bbox": ["<x0, y0, x1, y1 from matching block>"] }

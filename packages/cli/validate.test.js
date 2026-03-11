@@ -49,7 +49,7 @@ describe('validateStory', () => {
   });
 
   it('rejects invalid excerpt type', () => {
-    assert.throws(() => validateStory(makeStory({}, {}, { type: 'figure' })), /invalid excerpt type/);
+    assert.throws(() => validateStory(makeStory({}, {}, { type: 'video' })), /invalid excerpt type/);
   });
 });
 
