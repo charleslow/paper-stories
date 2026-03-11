@@ -1,0 +1,459 @@
+{
+  "id": "llm-jepa-large-language-models-meet-joint-embedding-predicti",
+  "title": "LLM-JEPA: Large Language Models Meet Joint Embedding Predictive Architectures",
+  "arxivId": "2509.14252",
+  "arxivUrl": "https://arxiv.org/abs/2509.14252",
+  "query": null,
+  "createdAt": "2026-03-11T12:00:00.000Z",
+  "chapters": [
+    {
+      "id": "chapter-0",
+      "label": "Paper Overview",
+      "excerpts": [],
+      "explanation": "This paper asks a deceptively simple question: if embedding-space training objectives (JEPAs) consistently outperform input-space reconstruction in vision, why hasn't anyone tried this for LLMs? The answer, it turns out, is that language presents unique challenges — LLMs are judged primarily by their generative output, making it risky to add objectives that might compromise text generation.\n\nLLM-JEPA, from Hai Huang, Yann LeCun, and Randall Balestriero, proposes a solution: augment the standard next-token prediction loss with a JEPA term that operates in embedding space. The key insight is treating paired data (like a natural language description and its corresponding code) as two \"views\" of the same underlying knowledge — directly mirroring how vision JEPAs treat augmented images. The results are striking: consistent improvements across Llama3, Gemma2, OpenELM, and OLMo models, across multiple datasets, with the bonus of resistance to overfitting. Let's see how it works."
+    },
+    {
+      "id": "chapter-1",
+      "label": "Vision vs Language Gap",
+      "excerpts": [
+        {
+          "content": "The research landscape around representation learning has been increasingly divided into two camps: (i) generative or reconstruction-based methods, and (ii) reconstruction-free Joint Embedding Predictive Architectures (JEPAs). While the former is self-explanatory, the latter learns a representation by ensuring that different views, e.g., pictures of a same building at different time of day, can be predicted from each other, all while preventing a collapse of the embeddings. By moving away from input-space objectives, JEPAs training benefits from less biases, at the cost of potential dimensional collapse of their representation.",
+          "latexSource": "The research landscape around representation learning has been increasingly divided into two camps: (i) generative or reconstruction-based methods \\cite{brown2020language,chowdhery2023palm,he2022masked,lecun2022path}, and (ii) reconstruction-free Joint Embedding Predictive Architectures (JEPAs) \\cite{assran2023self,baevski2022data2vec,bardes2024revisiting}. While the former is self-explanatory, the latter learns a representation by ensuring that different {\\em views}, e.g., pictures of a same building at different time of day, can be predicted from each other, all while preventing a collapse of the embeddings. By moving away from input-space objectives, JEPAs training benefits from less biases \\cite{littwin2024jepa}, at the cost of potential dimensional collapse of their representation \\cite{jing2021understanding,kenneweg2025jepa}.",
+          "type": "text",
+          "sourceFile": "main.tex",
+          "label": "Section 1",
+          "pdfRegion": {
+            "page": 0,
+            "bbox": [
+              0.1759,
+              0.7737,
+              0.8264,
+              0.9246
+            ]
+          }
+        }
+      ],
+      "explanation": "Representation learning has split into two paradigms. On one side, generative methods reconstruct inputs — this is where all modern LLMs live, predicting the next token in input space. On the other side, JEPAs learn by ensuring that embeddings of different \"views\" of the same data point are predictable from each other, without ever reconstructing raw inputs.\n\nIn vision, JEPAs have proven superior for perception tasks, with provable benefits for knowledge discovery. But in NLP, reconstruction-based methods dominate completely. The reason is practical: LLMs need to generate text, and JEPA-style objectives don't naturally produce generative models. This paper's contribution is finding a way to get the best of both worlds — keeping the generative loss while adding a JEPA regularizer on top."
+    },
+    {
+      "id": "chapter-2",
+      "label": "The Views Concept",
+      "excerpts": [
+        {
+          "content": "Viewing the (text,code) pairs as views of the same underlying knowledge enables JEPA objectives to be utilized with LLMs, complementing the standard text → code generative task.",
+          "latexSource": "{\\em Viewing the \\texttt{(text,code)} pairs as views of the same underlying knowledge enables JEPA objectives to be utilized with LLMs, complementing the standard \\texttt{text $\\rightarrow$ code} generative task.}",
+          "type": "text",
+          "sourceFile": "main.tex",
+          "label": "Section 1",
+          "pdfRegion": {
+            "page": 1,
+            "bbox": [
+              0.1755,
+              0.5522,
+              0.8262,
+              0.5791
+            ]
+          }
+        }
+      ],
+      "explanation": "The fundamental challenge in bringing JEPAs to language is: what are the \"views\"? In vision, you can crop, rotate, or color-jitter an image to create different views. In language, you need semantically meaningful pairs.\n\nThe authors' clever realization is that many NLP datasets already provide natural view pairs. A natural language description and its corresponding regex are two views of the same functionality. A text question and its SQL query are two views of the same database operation. A git issue description and its code diff are two views of the same bug fix. This framing — treating $(\\text{text}, \\text{code})$ pairs as views — is what makes JEPA applicable to LLMs without requiring artificial data augmentation."
+    },
+    {
+      "id": "chapter-3",
+      "label": "Standard LLM Loss",
+      "excerpts": [
+        {
+          "content": "\\mathcal{L}_{\\rm LLM}({\\rm Text}_{1:L-1},{\\rm Text}_{L})={\\rm XEnt}\\left({\\rm Classifier}\\left({\\rm Enc}({\\rm Text}_{1:L-1})\\right),{\\rm Text}_{L}\\right)",
+          "latexSource": "\\mathcal{L}_{\\rm LLM}({\\rm Text}_{1:L-1},{\\rm Text}_{L})={\\rm XEnt}\\left({\\rm Classifier}\\left({\\rm Enc}({\\rm Text}_{1:L-1})\\right),{\\rm Text}_{L}\\right),\\label{eq:L_llm}",
+          "type": "equation",
+          "sourceFile": "main.tex",
+          "label": "Equation 1",
+          "pdfRegion": {
+            "page": 2,
+            "bbox": [
+              0.2525,
+              0.1565,
+              0.8246,
+              0.1703
+            ]
+          }
+        }
+      ],
+      "explanation": "Before introducing their method, the authors establish the baseline: the standard LLM training objective. This is simply cross-entropy loss between predicted and ground-truth tokens, applied autoregressively across the sequence.\n\nThe key notation is $\\mathcal{L}_{\\rm LLM}$, which takes the context tokens ${\\rm Text}_{1:L-1}$ and predicts the next token ${\\rm Text}_L$. The encoder produces a representation, the classifier maps it to logits over the vocabulary, and cross-entropy measures the prediction quality. Importantly, LLM-JEPA is designed to be agnostic to the specific form of $\\mathcal{L}_{\\rm LLM}$ — it works whether the underlying loss is standard causal LM, instruction tuning, or any other variant. This generality is what makes the approach widely applicable."
+    },
+    {
+      "id": "chapter-4",
+      "label": "Core JEPA Objective",
+      "excerpts": [
+        {
+          "content": "\\mathcal{L}_{\\rm LLM\\text{-}JEPA} = \\underbrace{\\sum_{\\ell=2}^{L}\\mathcal{L}_{\\rm LLM}({\\rm Text}_{1:\\ell-1},{\\rm Text}_{\\ell})}_{\\text{generative capabilities (LLM)}}+ \\lambda \\times \\underbrace{d({\\rm Pred}({\\rm Enc}({\\rm Text})), {\\rm Enc}({\\rm Code}))}_{\\text{abstraction capabilities (JEPA)}}",
+          "latexSource": "\\mathcal{L}_{\\rm LLM-JEPA} = \\underbrace{\\sum_{\\ell=2}^{L}\\mathcal{L}_{\\rm LLM}({\\rm Text}_{1:\\ell-1},{\\rm Text}_{\\ell})}_{\\text{generative capabilities (LLM)}}+ \\lambda \\times \\underbrace{d({\\rm Pred}({\\rm Enc}({\\rm Text})), {\\rm Enc}({\\rm Code}))}_{\\text{abstraction capabilities (JEPA)}},\\label{eq:L_jepa}",
+          "type": "equation",
+          "sourceFile": "main.tex",
+          "label": "Equation 2",
+          "pdfRegion": {
+            "page": 2,
+            "bbox": [
+              0.2159,
+              0.6759,
+              0.8246,
+              0.7342
+            ]
+          }
+        }
+      ],
+      "explanation": "Here's the core contribution. The LLM-JEPA loss has two terms: the original $\\mathcal{L}_{\\rm LLM}$ for generative capabilities, plus a JEPA term for abstraction capabilities. The JEPA term measures the distance $d$ between the predicted embedding of Text and the actual embedding of Code.\n\nThe hyperparameter $\\lambda$ balances these two objectives. ${\\rm Pred}$ and ${\\rm Enc}$ are the predictor and encoder networks. This formulation directly mirrors vision JEPAs — predict one view's embedding from another view's embedding. The crucial design choice is that both terms coexist: you don't sacrifice generation for better representations. As we'll see in Chapter 8, these two objectives are surprisingly complementary rather than competitive."
+    },
+    {
+      "id": "chapter-5",
+      "label": "Encoder Design",
+      "excerpts": [
+        {
+          "content": "We use the hidden_state of the last token from the last layer as the embedding of an input sequence — as commonly done for LLM probing. We pack both Text and Code into a single context window, applying an attention mask to ensure they do not reference each other. Implementation-wise, most HuggingFace transformers support an additive attention mask, where setting entry (i,j) = −∞ prevents token j from attending to token i (for i < j). Using this mechanism, we implement LLM-JEPA with only one additional forward pass.",
+          "latexSource": "{\\bf The encoder.}~We use the \\texttt{hidden\\_state} of the last token from the last layer as the embedding of an input sequence--as commonly done for LLM probing. We pack both $\\rm Text$ and $\\rm Code$ into a single context window, applying an attention mask to ensure they do not reference each other. Implementation-wise, most HuggingFace \\texttt{transformers} support an additive attention mask, where setting entry $(i,j)=-\\infty$ prevents token $j$ from attending to token $i$ (for $i < j$). Using this mechanism, we implement LLM-JEPA with only one additional forward pass.",
+          "type": "text",
+          "sourceFile": "main.tex",
+          "label": "Section 3.1",
+          "pdfRegion": {
+            "page": 2,
+            "bbox": [
+              0.1759,
+              0.7931,
+              0.8264,
+              0.8894
+            ]
+          }
+        }
+      ],
+      "explanation": "For the encoder, the authors make a pragmatic choice: use the hidden state of the last token from the last layer, which is the standard approach for LLM probing. No additional encoder architecture is needed — the LLM itself serves as the encoder.\n\nThe clever implementation detail is packing both Text and Code into a single context window with a custom attention mask. This mask ensures the two views cannot attend to each other, producing independent embeddings in a single forward pass. Most HuggingFace transformers support additive attention masks where setting entry $(i,j) = -\\infty$ blocks attention. This means LLM-JEPA only needs one extra forward pass beyond standard training — a significant practical advantage over naive three-pass implementations."
+    },
+    {
+      "id": "chapter-6",
+      "label": "Tied-Weights Predictor",
+      "excerpts": [
+        {
+          "content": "We leverage the auto-regressive nature of LLM and their internal self-attention to define a tied-weights predictor. By introducing a special token [PRED] at the end of a given input, we allow for further nonlinear processing of the input hereby producing Pred(·) at the final embedding of the last layer. By reusing the internal weights of the LLM for the prediction task, we greatly reduce the training overhead and architectural design choices. Practically, we append k ∈ {0, …, K} predictor tokens to an input prompt and use the embedding of the last predictor token to be Pred(Enc(·)). When k=0, the predictor is trivial, i.e., Pred(x) = x.",
+          "latexSource": "{\\bf The predictor.}~We leverage the auto-regressive nature of LLM and their internal self-attention to define a {\\em tied-weights predictor}. By introducing a special token [PRED] at the end of a given input, we allow for further nonlinear processing of the input hereby producing $Pred(\\cdot)$ at the final embedding of the last layer. By reusing the internal weights of the LLM for the prediction task, we greatly reduce the training overhead and architectural design choices. Practically, we append $k \\in \\{0, \\dots, K\\}$ \\textit{predictor tokens} to an input prompt and use the embedding of the last predictor token to be $Pred(Enc(\\cdot))$. When $k=0$, the predictor is trivial, i.e., $Pred(x) = x$.",
+          "type": "text",
+          "sourceFile": "main.tex",
+          "label": "Section 3.1",
+          "pdfRegion": {
+            "page": 3,
+            "bbox": [
+              0.1759,
+              0.1062,
+              0.8256,
+              0.202
+            ]
+          }
+        }
+      ],
+      "explanation": "Rather than introducing a separate predictor network (which would add parameters and design complexity), the authors exploit the LLM's own autoregressive nature. They append $k$ special [PRED] tokens after the input, allowing the LLM's self-attention layers to further process the representation.\n\nThis is elegant for several reasons. When $k=0$, the predictor is the identity — you're directly comparing ${\\rm Enc}({\\rm Text})$ to ${\\rm Enc}({\\rm Code})$. When $k > 0$, the additional tokens give the model nonlinear processing capacity to transform the Text embedding toward the Code embedding space. The predictor shares all weights with the LLM, so there are zero additional parameters. This tied-weights design keeps the method lightweight and avoids the architectural decisions that plague other approaches."
+    },
+    {
+      "id": "chapter-7",
+      "label": "Custom Attention Mask",
+      "excerpts": [
+        {
+          "content": "The most important challenge in implementing our proposed LLM-JEPA objective lies in obtained the embeddings of the different views, e.g., Text and Code. A priori, it is not possible to get them in one forward pass because the current self-attention — albeit being causal. Even if we were to concatenate the two views which is already done for the next token prediction part of the loss, it would make the representation of the second view rely on the first view. As a result, we propose the following custom self-attention mask that is causal per block, with number of blocks set to 2.",
+          "latexSource": "The most important challenge in implementing our proposed LLM-JEPA objective lies in obtained the embeddings of the different views, e.g., Text and Code in \\cref{eq:L_jepa}. A priori, it is not possible to get them in one forward pass because the current self-attention--albeit being causal. Even if we were to concatenate the two views which is already done for the next token prediction part of the loss, it would make the representation of the second view rely on the first view. As a result, we propose the following custom self-attention mask that is causal per block, with number of blocks set to $2$:",
+          "type": "text",
+          "sourceFile": "main.tex",
+          "label": "Section 3.2",
+          "pdfRegion": {
+            "page": 3,
+            "bbox": [
+              0.1759,
+              0.254,
+              0.8235,
+              0.3358
+            ]
+          }
+        }
+      ],
+      "explanation": "Getting independent embeddings for Text and Code is the key implementation challenge. You can't just concatenate them in the standard causal setup — the Code representation would attend to Text tokens, making them dependent.\n\nThe solution is a block-diagonal attention mask: within each view, standard causal attention applies, but between views, all attention is blocked (set to $-\\infty$). This is implemented with a simple modification to the attention mask tensor. The result: two independent embeddings from a single forward pass. Combined with the standard causal pass for next-token prediction, LLM-JEPA requires only two forward passes total instead of the naive three. This implementation detail, while seemingly minor, is what makes the method practically feasible."
+    },
+    {
+      "id": "chapter-8",
+      "label": "NTP Won't Minimize JEPA",
+      "excerpts": [
+        {
+          "content": "Minimizing the LLM loss does not implicitly minimize the JEPA loss — indicating that it is required to add that term during training. A natural follow-up question is: are we trading off next token prediction for JEPA? The next token prediction capability is not hindered by the presence of the JEPA term. This is a very important observation echoing what was empirically observed where it was observed that autoencoders in image space could become much stronger classifiers without sacrificing the reconstruction and generative objective.",
+          "latexSource": "We obtain the following finding in \\cref{fig:loss}: minimizing $\\mathcal{L}_{\\rm LLM}$ {\\em does not} implicitly minimize $\\mathcal{L}_{\\rm JEPA}$--indicating that it is required to add that term during training. This can be seen by comparing the red and green lines. A natural follow-up question is {\\em are we trading off next token prediction for JEPA?}. In the same \\cref{fig:loss} we obtain that the next token prediction capability is not hindered by the presence of the JEPA term (compare the blue and yellow lines that are overlapping). This is a very important observation echoing what was empirically observed in \\cite{balestriero2024learning} where it was observed that autoencoders in image space could become much stronger classifiers without sacrificing the reconstruction and generative objective.",
+          "type": "text",
+          "sourceFile": "main.tex",
+          "label": "Section 3.3",
+          "pdfRegion": {
+            "page": 4,
+            "bbox": [
+              0.1759,
+              0.4434,
+              0.8246,
+              0.6498
+            ]
+          }
+        }
+      ],
+      "explanation": "A skeptic might ask: doesn't a good language model already learn to align Text and Code representations? The authors answer this definitively: no. When training with only $\\mathcal{L}_{\\rm LLM}$, the JEPA prediction loss stays constant — it's never implicitly minimized.\n\nEqually important is the converse finding: adding the JEPA term does not hurt next-token prediction. The NTP loss curves are nearly identical whether or not the JEPA objective is active. This mirrors findings in vision where autoencoders became stronger classifiers without sacrificing reconstruction quality. The takeaway is powerful: JEPA provides \"free\" additional structure in the latent space — you gain abstraction capabilities without trading off generative capabilities."
+    },
+    {
+      "id": "chapter-9",
+      "label": "Finetuning Results",
+      "excerpts": [
+        {
+          "content": "LLM-JEPA Improves Finetuning. We run experiments across multiple pretrained LLMs (Llama-3.2-1B-Instruct, gemma-2-2b-it, OpenELM-1_1B-Instruct, and OLMo-2-0425-1B-Instruct) with various datasets (NL-RX-SYNTH, NL-RX-TURK, GSM8K, Spider).",
+          "latexSource": "{\\bf LLM-JEPA Improves Finetuning.}~We run experiments across multiple pretrained LLMs (Llama-3.2-1B-Instruct \\citep{llama3}, gemma-2-2b-it \\citep{team2024gemma}, OpenELM-1\\_1B-Instruct \\citep{mehta2024openelm}, and OLMo-2-0425-1B-Instruct \\citep{olmo20242}) with various datasets (NL-RX-SYNTH, NL-RX-TURK \\citep{locascio2016neural}, GSM8K \\citep{cobbe2021training}, Spider \\citep{yu2018spider}).",
+          "type": "text",
+          "sourceFile": "main.tex",
+          "label": "Section 4.1",
+          "pdfRegion": {
+            "page": 4,
+            "bbox": [
+              0.1759,
+              0.8842,
+              0.8262,
+              0.9246
+            ]
+          }
+        }
+      ],
+      "explanation": "The experimental validation is thorough. The authors test across four model families (Llama-3.2, Gemma-2, OpenELM, OLMo) and four datasets (NL-RX-SYNTH, NL-RX-TURK, GSM8K, Spider). Each experiment uses five random seeds with paired one-tailed t-tests for statistical significance.\n\nThe improvements are consistent and often dramatic. On NL-RX-SYNTH with Llama-3.2-1B, accuracy jumps from 57.29% to 71.46%. OpenELM sees a doubling from 12.07% to 25.40%. The baseline hyperparameters are tuned first, then LLM-JEPA hyperparameters ($k$, $\\lambda$) are searched on a grid — ensuring comparisons are against the strongest possible baseline. This methodological care makes the results especially convincing."
+    },
+    {
+      "id": "chapter-10",
+      "label": "Overfitting Resistance",
+      "excerpts": [
+        {
+          "content": "We provide results demonstrating that LLM-JEPA improves performances across four model families, four datasets, 6 training epochs (we also observe that LLM-JEPA resists overfitting, whereas standard fine-tuning does not), and four different sizes: 1B, 3B, 7B, and 8B.",
+          "latexSource": "We provide results demonstrating that LLM-JEPA improves performances across\n\\begin{itemize}\n    \\item four model families, see \\cref{fig:overfit} left and \\cref{tab:model_accuracy} in the Appendix.\n    \\item four datasets, see \\cref{tab:dataset_accuracy} in the Appendix.\n    \\item 6 training epochs (\\cref{fig:overfit} right). We also observe that LLM-JEPA resists overfitting, whereas standard fine-tuning does not.\n    \\item four different sizes: 1B, 3B, 7B, and 8B, see \\cref{tab:size} in the Appendix\n\\end{itemize}",
+          "type": "text",
+          "sourceFile": "main.tex",
+          "label": "Section 4.1",
+          "pdfRegion": {
+            "page": 5,
+            "bbox": [
+              0.1757,
+              0.2599,
+              0.8235,
+              0.3686
+            ]
+          }
+        }
+      ],
+      "explanation": "One of the most practically valuable findings: LLM-JEPA resists overfitting. While standard fine-tuning accuracy degrades after a few epochs, LLM-JEPA continues improving through 6 epochs without degradation.\n\nThis overfitting resistance is observed across model families and dataset sizes (1B, 3B, 7B, 8B), and also holds for LoRA fine-tuning. The likely explanation is that the JEPA term acts as a regularizer, encouraging the model to learn structured representations rather than memorizing training examples. This has significant practical implications: practitioners spend less time tuning early stopping and can train longer with confidence. As discussed in Chapter 12, this regularization effect manifests as structured geometry in the embedding space."
+    },
+    {
+      "id": "chapter-11",
+      "label": "Pretraining Benefits",
+      "excerpts": [
+        {
+          "content": "LLM-JEPA Improves Pretraining. A natural extension of our fine-tuning results is to examine pretraining. We pretrain Llama-3.2-1B-Instruct from randomly initialized weights on the NL-RX-SYNTH dataset. Owing to the limited size of the dataset, the pretrained model fails to reliably learn how to terminate generation. To address this, we adjust the evaluation criterion, deeming a generated solution valid as long as it begins with the ground-truth sequence. We obtain that LLM-JEPA also improves the quality of the learned representation.",
+          "latexSource": "{\\bf LLM-JEPA Improves Pretraining.}~A natural extension of our fine-tuning results is to examine pretraining. We pretrain Llama-3.2-1B-Instruct from randomly initialized weights on the NL-RX-SYNTH dataset. Owing to the limited size of the dataset, the pretrained model fails to reliably learn how to terminate generation. To address this, we adjust the evaluation criterion, deeming a generated solution valid as long as it begins with the ground-truth sequence. We obtain that LLM-JEPA also improves the quality of the learned representation, as shown in \\cref{tab:pretrain}.",
+          "type": "text",
+          "sourceFile": "main.tex",
+          "label": "Section 4.1",
+          "pdfRegion": {
+            "page": 5,
+            "bbox": [
+              0.1765,
+              0.6655,
+              0.8262,
+              0.7475
+            ]
+          }
+        }
+      ],
+      "explanation": "LLM-JEPA isn't limited to fine-tuning. When pretraining Llama-3.2-1B from scratch on NL-RX-SYNTH, accuracy improves from 54.38% to 60.59% ($p = 2.94 \\times 10^{-4}$).\n\nA more advanced pretraining experiment uses the cestwc/paraphrase dataset, where groups of 5 paraphrases serve as multiple views. The $i$-th paraphrase predicts the $(i+1)$-th version's embedding, encouraging the JEPA loss to tie all versions into a compact subspace. After pretraining for 4 epochs and fine-tuning for 1 epoch on Rotten Tomatoes and Yelp (without JEPA loss during fine-tuning), statistically significant improvements emerge. This is notable because the benefits arise purely from pretraining — suggesting LLM-JEPA can improve the foundation itself, not just task-specific adaptation."
+    },
+    {
+      "id": "chapter-12",
+      "label": "Structured Representations",
+      "excerpts": [
+        {
+          "content": "We also examine the representation space to better understand how LLM-JEPA regularizes learned features. Specifically, we plot t-SNE embeddings for both Text and Code across three settings: the base model, a model fine-tuned with the standard LLM loss, and a model fine-tuned with the LLM-JEPA loss. Clear structure emerges after fine-tuning with the LLM-JEPA loss.",
+          "latexSource": "We also examine the representation space to better understand how LLM-JEPA regularizes learned features. Specifically, we plot $t$-SNE embeddings for both $\\operatorname{Text}$ and $\\operatorname{Code}$ across three settings: the base model, a model fine-tuned with $\\mathcal{L}_{\\rm LLM}$, and a model fine-tuned with $\\mathcal{L}_{\\rm LLM\\text{-}JEPA}$. As shown in \\cref{fig:structured_rep}, clear structure emerges after fine-tuning with $\\mathcal{L}_{\\rm LLM\\text{-}JEPA}$.",
+          "type": "text",
+          "sourceFile": "main.tex",
+          "label": "Section 4.2",
+          "pdfRegion": {
+            "page": 6,
+            "bbox": [
+              0.1757,
+              0.6597,
+              0.8262,
+              0.8105
+            ]
+          }
+        }
+      ],
+      "explanation": "What does LLM-JEPA actually do to the representation space? $t$-SNE visualizations reveal a striking difference. Standard fine-tuning disrupts the base model's representation structure, creating a scattered embedding space. LLM-JEPA, by contrast, induces clean, organized structure where Text and Code embeddings form paired clusters.\n\nThis visual evidence aligns with the intuition that the JEPA objective forces the model to learn a structured mapping between views. The representations aren't just better for the downstream task — they're geometrically organized in a way that reflects the semantic relationship between Text and Code. As we'll explore in the next chapter, this structure has a surprisingly clean mathematical characterization."
+    },
+    {
+      "id": "chapter-13",
+      "label": "Near-Linear Mapping",
+      "excerpts": [
+        {
+          "content": "We hypothesize that the LLM-JEPA loss enforces structure in the representation space by constraining the mapping from Enc(Text) to Enc(Code) within a narrow subspace. If this is the case, the SVD decomposition of Enc(Text) − Enc(Code) should yield significantly smaller singular values, which is confirmed. Furthermore, we hypothesize that the mapping is approximately linear. To test this, we compute the least-squares regression error, and the results support this hypothesis.",
+          "latexSource": "We hypothesize that $\\mathcal{L}_{\\rm LLM\\text{-}JEPA}$ enforces structure in the representation space by constraining the mapping from $\\operatorname{Enc}(\\operatorname{Text})$ to $\\operatorname{Enc}(\\operatorname{Code})$ within a narrow subspace. If this is the case, the SVD decomposition of $\\operatorname{Enc}(\\operatorname{Text}) - \\operatorname{Enc}(\\operatorname{Code})$ should yield significantly smaller singular values, which is confirmed in \\cref{fig:structured_rep_svd}. Furthermore, we hypothesize that the mapping is approximately linear. To test this, we compute the least-squares regression error, and \\cref{tab:lstsq} in the Appendix supports this hypothesis.",
+          "type": "text",
+          "sourceFile": "main.tex",
+          "label": "Section 4.2",
+          "pdfRegion": {
+            "page": 6,
+            "bbox": [
+              0.1757,
+              0.6597,
+              0.8262,
+              0.8105
+            ]
+          }
+        }
+      ],
+      "explanation": "The structured representations have a remarkable property: the mapping from ${\\rm Enc}({\\rm Text})$ to ${\\rm Enc}({\\rm Code})$ is approximately linear. The SVD decomposition of ${\\rm Enc}({\\rm Text}) - {\\rm Enc}({\\rm Code})$ yields singular values orders of magnitude smaller for LLM-JEPA compared to the baseline.\n\nConcretely, the least-squares regression error drops from 3953 (base model) and 3035 (standard fine-tuning) to just 4.04 for LLM-JEPA with $k=0$. The average top-100 singular value drops from ~310-340 to just 16.82. This means the Text-to-Code transformation lives in a narrow subspace — the model has learned a compact, structured mapping. This near-linearity likely explains why LLM-JEPA generalizes better: linear relationships are simpler and more robust than arbitrary nonlinear mappings."
+    },
+    {
+      "id": "chapter-14",
+      "label": "Design Ablations",
+      "excerpts": [
+        {
+          "content": "In this section, we examine several alternative design choices. Specifically, we compare the use of cosine similarity against ℓ₂-norm and mean squared error (MSE); appending a [PRED] token to the end of Text versus prepending it; and using Text to predict Code versus the reverse direction (Code → Text). None of these alternatives perform as well as LLM-JEPA, although some outperform standard fine-tuning.",
+          "latexSource": "In this section, we examine several alternative design choices. Specifically, we compare the use of cosine similarity against $\\ell_2$-norm and mean squared error (MSE); appending a [PRED] token to the end of $\\operatorname{Text}$ versus prepending it; and using $\\operatorname{Text}$ to predict $\\operatorname{Code}$ versus the reverse direction ($\\operatorname{Code} \\rightarrow \\operatorname{Text}$). As shown in \\cref{tab:design_ablation}, none of these alternatives perform as well as LLM-JEPA, although some outperform standard fine-tuning.",
+          "type": "text",
+          "sourceFile": "main.tex",
+          "label": "Section 4.3",
+          "pdfRegion": {
+            "page": 6,
+            "bbox": [
+              0.1759,
+              0.8566,
+              0.8256,
+              0.9246
+            ]
+          }
+        }
+      ],
+      "explanation": "Not all design choices work equally well. The ablation study on NL-RX-SYNTH (baseline: 57.29%) reveals clear winners and losers.\n\nCosine similarity (LLM-JEPA default: 71.46%) substantially outperforms $\\ell_2$-norm (2.22% — complete failure), MSE (70.64%), prepending the predictor token (68.07%), and reversing the prediction direction Code$\\to$Text (65.70%). The InfoNCE contrastive loss performs worst at 34.40% with high variance. The $\\ell_2$-norm failure is particularly instructive: it likely causes embedding collapse or divergence. Cosine similarity's success makes sense — it normalizes away magnitude, focusing purely on directional alignment, which is more stable for training. These results justify every design choice in the final method."
+    },
+    {
+      "id": "chapter-15",
+      "label": "Beyond Code Tasks",
+      "excerpts": [
+        {
+          "content": "We evaluate Llama-3.2-1B-Instruct on two QA benchmarks: NQ-Open and HellaSwag. Our results show that LLM-JEPA achieves statistically significant improvements on both datasets, demonstrating its capability beyond the canonical setup where Text and Code are treated as two complementary views of the same object.",
+          "latexSource": "\\textbf{We evaluate Llama-3.2-1B-Instruct on two QA benchmarks}: NQ-Open~\\citep{lee-etal-2019-latent-no-open} and HellaSwag~\\citep{zellers2019hellaswag}. Our results show that LLM-JEPA achieves statistically significant improvements on both datasets, demonstrating its capability beyond the canonical setup where $\\rm Text$ and $\\rm Code$ are treated as two complementary views of the same object.",
+          "type": "text",
+          "sourceFile": "main.tex",
+          "label": "Section 5.1",
+          "pdfRegion": {
+            "page": 7,
+            "bbox": [
+              0.1757,
+              0.4542,
+              0.824,
+              0.5084
+            ]
+          }
+        }
+      ],
+      "explanation": "Can LLM-JEPA work when Text and Code aren't naturally two views of the same thing? The authors push the boundaries with NQ-Open (question answering) and HellaSwag (commonsense reasoning).\n\nFor NQ-Open, Text is the question and Code is the answer span — often just a few tokens, unlike the balanced lengths in regex/SQL tasks. For HellaSwag, Text is the context and Code is the correct continuation — both are integral parts of the question rather than equivalent views. Despite these mismatches with the canonical JEPA setup, LLM-JEPA achieves statistically significant improvements on both (NQ-Open: 20.12% $\\to$ 21.59%, HellaSwag: 69.40% $\\to$ 70.51%). This suggests the JEPA regularization benefits extend beyond strict view-equivalence to any paired text structure."
+    },
+    {
+      "id": "chapter-16",
+      "label": "Reasoning Models",
+      "excerpts": [
+        {
+          "content": "We then evaluate two strong reasoning models — Qwen3-1.7B and DeepSeek-R1-Distill-Qwen-1.5B — on GSM8K. Both models achieve statistically significant improvements when augmented with LLM-JEPA. These results offer promising evidence that LLM-JEPA extends its benefits to large reasoning models (LRMs).",
+          "latexSource": "\\textbf{We then evaluate two strong reasoning models}—Qwen3-1.7B~\\citep{yang2025qwen3technicalreport} and DeepSeek-R1-Distill-Qwen-1.5B~\\citep{deepseekai2025deepseekr1incentivizingreasoningcapability}—on GSM8K. As shown in \\cref{tab:reasoning_model}, both models achieve statistically significant improvements when augmented with LLM-JEPA. These results offer promising evidence that LLM-JEPA extends its benefits to large reasoning models (LRMs).",
+          "type": "text",
+          "sourceFile": "main.tex",
+          "label": "Section 5.1",
+          "pdfRegion": {
+            "page": 7,
+            "bbox": [
+              0.1757,
+              0.7964,
+              0.8262,
+              0.8506
+            ]
+          }
+        }
+      ],
+      "explanation": "The generality claim extends to reasoning models. Qwen3-1.7B and DeepSeek-R1-Distill-Qwen-1.5B, both strong reasoning-specialized models, show statistically significant improvements on GSM8K when augmented with LLM-JEPA.\n\nQwen3 improves from 44.32% to 45.00% ($p = 0.0115$) and R1-Distill-Qwen from 13.87% to 15.04% ($p = 0.0396$). While the absolute improvements are modest, they're achieved on top of already-optimized reasoning architectures. The fact that JEPA can improve models specifically designed for reasoning — which have very different training dynamics than standard instruction-tuned models — suggests the embedding-space regularization provides complementary benefits to chain-of-thought and other reasoning techniques."
+    },
+    {
+      "id": "chapter-17",
+      "label": "Loss Dropout",
+      "excerpts": [
+        {
+          "content": "To further reduce compute, we introduce random JEPA-loss dropout (LD). During training or fine-tuning, we randomly drop the JEPA loss at a specified LD rate. Loss dropout is applied at the batch level. When active, it eliminates the need for an extra forward pass to compute Enc(Text) and Enc(Code), thereby saving compute. If LD = α, the per-epoch cost becomes 2 − α times that of standard fine-tuning, since each batch saves α forward passes.",
+          "latexSource": "To further reduce compute, we introduce \\textbf{random JEPA-loss dropout} ($LD$). \nDuring training or fine-tuning, we randomly drop the JEPA loss at a specified $LD$ rate. \nLoss dropout is applied at the batch level. When active, it eliminates the need for an extra forward pass \nto compute $\\mathrm{Enc}(\\mathrm{Text})$ and $\\mathrm{Enc}(\\mathrm{Code})$, thereby saving compute. \nIf $LD = \\alpha$, the per-epoch cost becomes $2 - \\alpha$ times that of standard fine-tuning, \nsince each batch saves $\\alpha$ forward passes.",
+          "type": "text",
+          "sourceFile": "main.tex",
+          "label": "Section 5.2",
+          "pdfRegion": {
+            "page": 7,
+            "bbox": [
+              0.176,
+              0.8979,
+              0.8238,
+              0.9246
+            ]
+          }
+        }
+      ],
+      "explanation": "The main practical limitation of LLM-JEPA is computational cost: it requires two forward passes instead of one. Random JEPA-loss dropout ($LD$) addresses this elegantly.\n\nDuring training, the JEPA loss is randomly dropped for a fraction $\\alpha$ of batches. When dropped, the extra forward pass for computing ${\\rm Enc}({\\rm Text})$ and ${\\rm Enc}({\\rm Code})$ is skipped entirely, reducing that batch's cost to match standard fine-tuning. The per-epoch cost becomes $2 - \\alpha$ times the baseline. At $LD = 0.75$, the compute overhead is only 25% above standard training while still outperforming it in accuracy. This makes LLM-JEPA practical even in compute-constrained settings."
+    },
+    {
+      "id": "chapter-18",
+      "label": "Compute Efficiency",
+      "excerpts": [
+        {
+          "content": "Moreover, increasing λ in proportion to the dropout rate can further improve performance. Empirically, we observe that keeping λ × (1 − α) approximately constant provides a useful guideline for co-tuning λ and α to balance compute efficiency and accuracy.",
+          "latexSource": "Moreover, increasing $\\lambda$ in proportion to the dropout rate can further improve performance. \nEmpirically, we observe that keeping $\\lambda \\times (1 - \\alpha)$ approximately constant \nprovides a useful guideline for co-tuning $\\lambda$ and $\\alpha$ to balance compute efficiency and accuracy.",
+          "type": "text",
+          "sourceFile": "main.tex",
+          "label": "Section 5.2",
+          "pdfRegion": {
+            "page": 8,
+            "bbox": [
+              0.1765,
+              0.6409,
+              0.8256,
+              0.7644
+            ]
+          }
+        }
+      ],
+      "explanation": "The loss dropout mechanism comes with a useful scaling rule: keep $\\lambda \\times (1 - \\alpha)$ approximately constant when adjusting the dropout rate. Intuitively, if you're applying the JEPA loss only half the time ($\\alpha = 0.5$), double $\\lambda$ to compensate.\n\nThe empirical results validate this guideline. At $LD = 0.75$ with $\\lambda = 4$, accuracy reaches 73.08% — actually exceeding the full LLM-JEPA without dropout (63.96% at $LD = 0$, $\\lambda = 1$). This counterintuitive result suggests that loss dropout may also serve as a regularizer, preventing the JEPA term from overfitting to specific batch statistics. Combined with the custom attention mask from Chapter 7, loss dropout offers a practical path to scaling LLM-JEPA to full-scale pretraining."
+    },
+    {
+      "id": "chapter-19",
+      "label": "Limitations",
+      "excerpts": [
+        {
+          "content": "Despite its strong accuracy gains, LLM-JEPA introduces two additional hyperparameters. The optimal configuration may occur at any point in a grid (λ, k), which imposes a significant cost for hyperparameter tuning. While we have not identified an efficient method to explore this space, we empirically observe that adjacent grid points often yield similar accuracy, suggesting the potential for a more efficient tuning algorithm.",
+          "latexSource": "{\\bf Limitations}\nDespite its strong accuracy gains, LLM-JEPA introduces two additional hyperparameters. As shown in \\cref{fig:hyper}, the optimal configuration may occur at any point in a grid $(\\lambda, k)$, which imposes a significant cost for hyperparameter tuning. While we have not identified an efficient method to explore this space, we empirically observe that adjacent grid points often yield similar accuracy, suggesting the potential for a more efficient tuning algorithm.",
+          "type": "text",
+          "sourceFile": "main.tex",
+          "label": "Section 6",
+          "pdfRegion": {
+            "page": 9,
+            "bbox": [
+              0.1759,
+              0.3053,
+              0.8264,
+              0.3733
+            ]
+          }
+        }
+      ],
+      "explanation": "LLM-JEPA introduces two hyperparameters beyond the baseline: $\\lambda$ (JEPA loss weight) and $k$ (number of predictor tokens). The optimal configuration can occur at any point in the $(\\lambda, k)$ grid, requiring a hyperparameter search.\n\nThe authors search over $(k, \\lambda) \\in \\{0,1,2,3,4\\} \\times \\{0.5,1,2,4\\}$ — a 20-point grid — which adds significant tuning cost. While adjacent grid points tend to yield similar accuracy (suggesting smooth landscapes amenable to efficient search), no principled method for setting these hyperparameters has been identified. The 2-fold compute increase during training, while mitigated by loss dropout, remains a barrier to adoption. Additionally, the method currently works best with datasets that have natural two-view structure, though the Q&A experiments in Chapter 15 suggest this constraint may be relaxable."
+    },
+    {
+      "id": "chapter-20",
+      "label": "Key Takeaways",
+      "excerpts": [],
+      "explanation": "LLM-JEPA demonstrates that the embedding-space JEPA objective, proven in vision, translates successfully to language. The key contributions are:\n\n**The method**: A combined loss that preserves generative capabilities (next-token prediction) while adding abstraction capabilities (JEPA embedding prediction). The tied-weights predictor, custom attention mask, and cosine similarity metric make the implementation clean and lightweight.\n\n**The findings**: Consistent improvements across 4 model families, 4+ datasets, and model sizes from 1B to 8B. Notably, LLM-JEPA resists overfitting and induces near-linear structure in the embedding space. The JEPA and NTP objectives are complementary, not competing.\n\n**Practical scalability**: Loss dropout reduces computational overhead to as little as 25% above baseline while maintaining accuracy gains. The method extends beyond code-like tasks to Q&A and reasoning models.\n\nThe open questions are exciting: can data augmentation enable JEPA for arbitrary text (not just paired views)? Can the approach scale to full pretraining? The preliminary results suggest yes on both counts."
+    }
+  ]
+}

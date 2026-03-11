@@ -80,7 +80,7 @@ export interface LocalStory {
 
 export async function fetchLocalStories(): Promise<LocalStory[]> {
   try {
-    const res = await fetch('local-stories/_discover');
+    const res = await fetch('/local-stories/_discover');
     if (!res.ok) return [];
     return await res.json();
   } catch {

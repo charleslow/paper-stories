@@ -60,7 +60,7 @@ async function handleRequest(req: Connect.IncomingMessage, res: ServerResponse, 
 
 // https://vite.dev/config/
 export default defineConfig({
-  base: '/paper-stories/',  // Absolute paths for browser; Tailscale strips prefix before backend sees it
+  base: '/',
   server: {
     host: '127.0.0.1',
     allowedHosts: true,
