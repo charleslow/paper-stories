@@ -12,7 +12,7 @@
 
 import { Command } from 'commander';
 import { spawn, execFileSync } from 'child_process';
-import { mkdirSync, existsSync, readFileSync, writeFileSync, unlinkSync } from 'fs';
+import { mkdirSync, existsSync, readFileSync, writeFileSync, unlinkSync, copyFileSync } from 'fs';
 import { join, resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { v4 as uuidv4 } from 'uuid';
@@ -240,13 +240,19 @@ async function generateStory(arxivInput, options) {
   // Publish to cache repo if specified
   if (options.cacheRepo) {
     const slug = options.slug || slugify(story.title);
-    await publishToCache(story, slug, options.cacheRepo);
+    await publishToCache(story, slug, options.cacheRepo, pdfPath);
   } else {
     // Copy to output directory
     const slug = options.slug || slugify(story.title);
     const outputPath = join(resolve(options.outputDir), `${slug}.json`);
     story.id = slug;
     writeFileSync(outputPath, JSON.stringify(story, null, 2));
+    // Copy PDF alongside the story JSON
+    if (pdfPath && existsSync(pdfPath)) {
+      const pdfOutputPath = join(resolve(options.outputDir), `${slug}.pdf`);
+      copyFileSync(pdfPath, pdfOutputPath);
+      console.log(`✓ PDF saved to: ${pdfOutputPath}`);
+    }
     console.log(`\n✓ Story saved to: ${outputPath}`);
   }
 
@@ -254,7 +260,7 @@ async function generateStory(arxivInput, options) {
   console.log(`\n📁 Generation files kept at: ${generationDir}`);
 }
 
-async function publishToCache(story, slug, cacheRepoPath) {
+async function publishToCache(story, slug, cacheRepoPath, pdfPath) {
   const storiesDir = join(cacheRepoPath, 'stories');
   if (!existsSync(storiesDir)) {
     throw new Error(`Cache repo stories directory not found: ${storiesDir}`);
@@ -266,6 +272,13 @@ async function publishToCache(story, slug, cacheRepoPath) {
   // Write story file
   const storyPath = join(storiesDir, `${slug}.json`);
   writeFileSync(storyPath, JSON.stringify(story, null, 2));
+
+  // Copy PDF alongside the story JSON
+  if (pdfPath && existsSync(pdfPath)) {
+    const pdfOutputPath = join(storiesDir, `${slug}.pdf`);
+    copyFileSync(pdfPath, pdfOutputPath);
+    console.log(`✓ PDF published to: ${pdfOutputPath}`);
+  }
 
   // Update manifest
   const manifestPath = join(storiesDir, 'manifest.json');
