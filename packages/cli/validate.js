@@ -8,12 +8,24 @@ export function validateStory(story) {
     throw new Error(`Expected at least 5 chapters, got ${story.chapters?.length || 0}`);
   }
 
-  for (const ch of story.chapters) {
+  const totalChapters = story.chapters.length;
+  for (let ci = 0; ci < totalChapters; ci++) {
+    const ch = story.chapters[ci];
     if (!ch.id || !ch.label || !ch.explanation) {
       throw new Error(`Chapter ${ch.id} missing required fields`);
     }
     if (!Array.isArray(ch.excerpts)) {
       throw new Error(`Chapter ${ch.id} excerpts must be an array`);
+    }
+    const isFirstOrLast = ci === 0 || ci === totalChapters - 1;
+    if (isFirstOrLast) {
+      if (ch.excerpts.length !== 0) {
+        throw new Error(`Chapter ${ch.id} (first/last) must have 0 excerpts, got ${ch.excerpts.length}`);
+      }
+    } else {
+      if (ch.excerpts.length !== 1) {
+        throw new Error(`Chapter ${ch.id} must have exactly 1 excerpt, got ${ch.excerpts.length}`);
+      }
     }
     for (const ex of ch.excerpts) {
       if (!ex.content || !ex.type || !ex.latexSource) {

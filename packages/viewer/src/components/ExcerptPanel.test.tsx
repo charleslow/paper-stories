@@ -1,7 +1,11 @@
 import { render, screen } from '@testing-library/react';
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import ExcerptPanel from './ExcerptPanel';
 import { Excerpt } from '../types';
+
+vi.mock('./PdfRegionViewer', () => ({
+  default: () => <div data-testid="pdf-region-viewer" />,
+}));
 
 const baseExcerpt: Excerpt = {
   content: 'Attention is all you need.',

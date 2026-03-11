@@ -1,9 +1,11 @@
 import { useState } from 'react';
 import { Excerpt } from '../types';
 import MathRenderer from './MathRenderer';
+import PdfRegionViewer from './PdfRegionViewer';
 
 interface ExcerptPanelProps {
   excerpts: Excerpt[];
+  pdfUrl?: string;
   storyMeta?: {
     title: string;
     arxivId: string;
@@ -12,7 +14,7 @@ interface ExcerptPanelProps {
   };
 }
 
-export default function ExcerptPanel({ excerpts, storyMeta }: ExcerptPanelProps) {
+export default function ExcerptPanel({ excerpts, pdfUrl, storyMeta }: ExcerptPanelProps) {
   if (excerpts.length === 0) {
     // Overview/summary chapter — show metadata
     return (
@@ -43,13 +45,13 @@ export default function ExcerptPanel({ excerpts, storyMeta }: ExcerptPanelProps)
   return (
     <div className="excerpt-panel">
       {excerpts.map((excerpt, i) => (
-        <ExcerptCard key={i} excerpt={excerpt} />
+        <ExcerptCard key={i} excerpt={excerpt} pdfUrl={pdfUrl} />
       ))}
     </div>
   );
 }
 
-function ExcerptCard({ excerpt }: { excerpt: Excerpt }) {
+function ExcerptCard({ excerpt, pdfUrl }: { excerpt: Excerpt; pdfUrl?: string }) {
   const [showSource, setShowSource] = useState(false);
 
   return (
@@ -76,6 +78,14 @@ function ExcerptCard({ excerpt }: { excerpt: Excerpt }) {
           <blockquote className="excerpt-text">{excerpt.content}</blockquote>
         )}
       </div>
+
+      {pdfUrl && excerpt.pdfRegion && (
+        <PdfRegionViewer
+          pdfUrl={pdfUrl}
+          page={excerpt.pdfRegion.page}
+          bbox={excerpt.pdfRegion.bbox}
+        />
+      )}
 
       <button
         className="excerpt-source-toggle"
