@@ -365,6 +365,15 @@ html, body {
   font-style: italic;
 }
 
+.excerpt-text p {
+  margin: 0;
+}
+
+.excerpt-text .katex {
+  font-size: 1em;
+  font-style: normal;
+}
+
 /* Equation excerpts */
 .excerpt-type-equation .excerpt-content {
   background: var(--equation-bg);

@@ -44,7 +44,7 @@ Write all intermediate and final files to: ${generationDir}
 ## CRITICAL RULE: NO HALLUCINATION
 Every excerpt you include MUST be grounded in the paper's source files.
 - The \`latexSource\` field must be copied VERBATIM from the .tex files — character for character
-- Text excerpts: \`content\` should be the exact quote with minor LaTeX artifacts cleaned
+- Text excerpts: \`content\` should be the exact quote with minor LaTeX artifacts cleaned (remove \\cite, \\ref, \\label, but KEEP inline math like \`$x$\`)
 - Equation excerpts: \`content\` should be KaTeX-renderable LaTeX, mathematically equivalent to the raw source (you may adapt syntax for KaTeX compatibility)
 - You must NOT invent equations or claims not present in the paper
 - Each excerpt MUST include the source file and a \`latexSource\` field showing the raw LaTeX
@@ -102,7 +102,7 @@ For EACH excerpt you collect:
 3. Record which file it came from
 4. Write a KaTeX-renderable version into \`content\` (see below)
 
-**Text excerpts**: \`content\` should be readable text — remove \\cite{}, \\ref{}, \\label{} etc. Keep \`latexSource\` as the raw version.
+**Text excerpts**: \`content\` should be readable text — remove \\cite{}, \\ref{}, \\label{} etc., but KEEP inline math expressions (e.g. \`$\\lambda$\`, \`$x^2$\`, \`$\\text{Text} \\rightarrow \\text{Code}$\`). The viewer renders these with KaTeX. Keep \`latexSource\` as the raw version.
 
 **Equation excerpts**: \`content\` should be **clean KaTeX-compatible LaTeX** that renders correctly. You may adapt from the raw source:
 - Strip \\begin{equation}/\\end{equation} and similar environments — just the math content

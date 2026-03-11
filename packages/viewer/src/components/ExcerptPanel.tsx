@@ -1,4 +1,7 @@
 import { useState } from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
 import { Excerpt } from '../types';
 import MathRenderer from './MathRenderer';
 import PdfRegionViewer from './PdfRegionViewer';
@@ -90,7 +93,14 @@ function ExcerptCard({ excerpt, pdfUrl }: { excerpt: Excerpt; pdfUrl?: string })
             {excerpt.type === 'equation' ? (
               <MathRenderer math={excerpt.content} display={true} />
             ) : (
-              <blockquote className="excerpt-text">{excerpt.content}</blockquote>
+              <blockquote className="excerpt-text">
+                <ReactMarkdown
+                  remarkPlugins={[remarkMath]}
+                  rehypePlugins={[rehypeKatex]}
+                >
+                  {excerpt.content}
+                </ReactMarkdown>
+              </blockquote>
             )}
           </div>
           {pdfUrl && excerpt.pdfRegion && (

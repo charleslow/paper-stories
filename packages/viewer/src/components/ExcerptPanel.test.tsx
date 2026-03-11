@@ -38,6 +38,19 @@ describe('ExcerptPanel', () => {
     expect(screen.queryByText(/^p\.\d+$/)).not.toBeInTheDocument();
   });
 
+  it('renders inline math in text excerpts', () => {
+    const mathExcerpt: Excerpt = {
+      content: 'The parameter $\\lambda$ controls the balance.',
+      latexSource: 'The parameter $\\lambda$ controls the balance.',
+      type: 'text',
+      sourceFile: 'main.tex',
+      label: 'Section 2',
+    };
+    const { container } = render(<ExcerptPanel excerpts={[mathExcerpt]} />);
+    const katexElements = container.querySelectorAll('.katex');
+    expect(katexElements.length).toBeGreaterThan(0);
+  });
+
   it('renders empty state with story metadata', () => {
     render(<ExcerptPanel excerpts={[]} storyMeta={{
       title: 'Test Paper', arxivId: '2401.12345',
