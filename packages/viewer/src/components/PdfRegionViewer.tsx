@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import * as pdfjsLib from 'pdfjs-dist';
 import pdfjsWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 
@@ -54,29 +54,42 @@ export default function PdfRegionViewer({ pdfUrl, page, bbox }: PdfRegionViewerP
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [x0, y0, x1, y1] = bbox;
 
-  const renderPage = useCallback(async (currentScale: number) => {
+  // IMPORTANT: pdfjs-dist v5 render() pitfalls
+  // 1. Pass `canvas` (the element), NOT `canvasContext`. The `canvasContext`
+  //    parameter is deprecated — pdf.js ignores it when `canvas` is provided
+  //    and obtains its own 2D context internally.
+  // 2. Each render() registers the canvas in an internal #canvasInUse set.
+  //    Starting a second render on the same canvas before the first completes
+  //    throws "Cannot use the same canvas during multiple render() operations."
+  //    Always cancel the previous RenderTask in the effect cleanup to avoid this
+  //    (especially important with React StrictMode, which double-fires effects).
+  useEffect(() => {
     const canvas = canvasRef.current;
     const container = containerRef.current;
     const highlight = highlightRef.current;
     if (!canvas || !container || !highlight) return;
 
-    try {
-      setStatus('loading');
+    let cancelled = false;
+    setStatus('loading');
+
+    const task = (async () => {
       const doc = await getPdfDocument(pdfUrl);
       const pdfPage = await doc.getPage(page + 1); // pdf.js uses 1-indexed
-      const viewport = pdfPage.getViewport({ scale: currentScale });
+      const viewport = pdfPage.getViewport({ scale });
 
       canvas.width = viewport.width;
       canvas.height = viewport.height;
 
-      const ctx = canvas.getContext('2d');
-      if (!ctx) throw new Error('Cannot get 2d context from canvas');
+      const renderTask = pdfPage.render({ canvas, viewport });
+      try {
+        await renderTask.promise;
+      } catch (err) {
+        // RenderingCancelledException is expected when we cancel
+        if ((err as { name?: string }).name === 'RenderingCancelledException') return;
+        throw err;
+      }
 
-      await pdfPage.render({
-        canvasContext: ctx,
-        viewport,
-        canvas,
-      }).promise;
+      if (cancelled) return;
 
       // Position highlight overlay
       highlight.style.left = `${x0 * viewport.width}px`;
@@ -96,15 +109,22 @@ export default function PdfRegionViewer({ pdfUrl, page, bbox }: PdfRegionViewerP
       }
 
       setStatus('ready');
-    } catch (err) {
-      console.error('PdfRegionViewer: failed to render page', { pdfUrl, page, err });
-      setStatus('error');
-    }
-  }, [pdfUrl, page, x0, y0, x1, y1]);
+      return renderTask;
+    })();
 
-  useEffect(() => {
-    renderPage(scale);
-  }, [scale, renderPage]);
+    task.catch((err) => {
+      if (!cancelled) {
+        console.error('PdfRegionViewer: failed to render page', { pdfUrl, page, err });
+        setStatus('error');
+      }
+    });
+
+    return () => {
+      cancelled = true;
+      // Cancel any in-flight pdf.js render so the canvas is released
+      task.then((renderTask) => renderTask?.cancel()).catch(() => {});
+    };
+  }, [pdfUrl, page, scale, x0, y0, x1, y1]);
 
   const zoomIn = () => setScale(s => Math.min(MAX_SCALE, s + SCALE_STEP));
   const zoomOut = () => setScale(s => Math.max(MIN_SCALE, s - SCALE_STEP));
