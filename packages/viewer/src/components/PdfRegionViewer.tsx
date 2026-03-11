@@ -69,8 +69,11 @@ export default function PdfRegionViewer({ pdfUrl, page, bbox }: PdfRegionViewerP
       canvas.width = viewport.width;
       canvas.height = viewport.height;
 
+      const ctx = canvas.getContext('2d');
+      if (!ctx) throw new Error('Cannot get 2d context from canvas');
+
       await pdfPage.render({
-        canvasContext: canvas.getContext('2d')!,
+        canvasContext: ctx,
         viewport,
       }).promise;
 
@@ -92,7 +95,8 @@ export default function PdfRegionViewer({ pdfUrl, page, bbox }: PdfRegionViewerP
       }
 
       setStatus('ready');
-    } catch {
+    } catch (err) {
+      console.error('PdfRegionViewer: failed to render page', { pdfUrl, page, err });
       setStatus('error');
     }
   }, [pdfUrl, page, x0, y0, x1, y1]);
