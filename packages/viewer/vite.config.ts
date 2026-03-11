@@ -1,20 +1,26 @@
 /// <reference types="vitest/config" />
-import { defineConfig } from 'vite'
+import { defineConfig, type Connect } from 'vite'
 import react from '@vitejs/plugin-react'
 import path from 'path'
-import fs from 'fs'
+import fs from 'fs/promises'
+import type { ServerResponse } from 'http'
 
 // Shared middleware for serving local stories (works in both dev and preview)
-function localStoriesMiddleware(req: any, res: any, next: any) {
+function localStoriesMiddleware(req: Connect.IncomingMessage, res: ServerResponse, next: Connect.NextFunction) {
   const storiesDir = path.resolve(__dirname, 'dist/stories')
 
+  handleRequest(req, res, next, storiesDir).catch(next)
+}
+
+async function handleRequest(req: Connect.IncomingMessage, res: ServerResponse, next: Connect.NextFunction, storiesDir: string) {
   // Discovery endpoint: list all stories
   if (req.url === '/_discover') {
     try {
-      const files = fs.readdirSync(storiesDir).filter((f: string) => f.endsWith('.json') && f !== 'manifest.json')
-      const stories = files.map((f: string) => {
+      const allFiles = await fs.readdir(storiesDir)
+      const files = allFiles.filter(f => f.endsWith('.json') && f !== 'manifest.json')
+      const stories = (await Promise.all(files.map(async (f) => {
         try {
-          const data = JSON.parse(fs.readFileSync(path.join(storiesDir, f), 'utf-8'))
+          const data = JSON.parse(await fs.readFile(path.join(storiesDir, f), 'utf-8'))
           return {
             id: data.id || f.replace('.json', ''),
             title: data.title || f.replace('.json', ''),
@@ -23,7 +29,7 @@ function localStoriesMiddleware(req: any, res: any, next: any) {
             url: `local-stories/${f}`,
           }
         } catch { return null }
-      }).filter(Boolean)
+      }))).filter(Boolean)
       res.setHeader('Content-Type', 'application/json')
       res.end(JSON.stringify(stories))
     } catch {
@@ -40,13 +46,14 @@ function localStoriesMiddleware(req: any, res: any, next: any) {
     return next()
   }
 
-  if (fs.existsSync(filePath)) {
+  try {
+    const content = await fs.readFile(filePath)
     const ext = path.extname(filePath).toLowerCase()
     const contentType = ext === '.pdf' ? 'application/pdf' : 'application/json'
     res.setHeader('Content-Type', contentType)
     res.setHeader('Access-Control-Allow-Origin', '*')
-    res.end(fs.readFileSync(filePath))
-  } else {
+    res.end(content)
+  } catch {
     next()
   }
 }
