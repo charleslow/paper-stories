@@ -6,12 +6,13 @@
 # ///
 
 """
-Extract text blocks with normalized bounding boxes from a PDF.
+Extract text and image blocks with normalized bounding boxes from a PDF.
 
-Outputs a JSON file mapping each page to its text blocks, each with:
-- text: the block's text content
+Outputs a JSON file mapping each page to its blocks, each with:
+- text: the block's text content (text blocks only)
 - bbox: normalized coordinates [x0, y0, x1, y1] in range [0, 1]
 - page: 0-indexed page number
+- type: "text" or "image"
 
 Usage:
     uv run extract_regions.py <pdf_path> [--output <output.json>]
@@ -25,7 +26,7 @@ import pymupdf
 
 
 def extract_regions(pdf_path: str) -> dict:
-    """Extract text blocks with normalized bounding boxes from a PDF."""
+    """Extract text and image blocks with normalized bounding boxes from a PDF."""
     doc = pymupdf.open(pdf_path)
     pages = []
 
@@ -38,36 +39,42 @@ def extract_regions(pdf_path: str) -> dict:
             continue
 
         blocks = page.get_text("blocks")
-        text_blocks = []
+        extracted_blocks = []
 
         for block in blocks:
-            x0, y0, x1, y1, text, block_no, block_type = block
+            x0, y0, x1, y1, content, block_no, block_type = block
 
-            # Skip image blocks (type 1)
-            if block_type != 0:
-                continue
+            bbox = [
+                round(x0 / width, 4),
+                round(y0 / height, 4),
+                round(x1 / width, 4),
+                round(y1 / height, 4),
+            ]
 
-            text = text.strip()
-            if not text:
-                continue
-
-            # Normalize coordinates to [0, 1]
-            text_blocks.append({
-                "text": text,
-                "bbox": [
-                    round(x0 / width, 4),
-                    round(y0 / height, 4),
-                    round(x1 / width, 4),
-                    round(y1 / height, 4),
-                ],
-                "blockIndex": block_no,
-            })
+            if block_type == 0:
+                # Text block
+                text = content.strip()
+                if not text:
+                    continue
+                extracted_blocks.append({
+                    "type": "text",
+                    "text": text,
+                    "bbox": bbox,
+                    "blockIndex": block_no,
+                })
+            elif block_type == 1:
+                # Image block — no text content, just the bounding box
+                extracted_blocks.append({
+                    "type": "image",
+                    "bbox": bbox,
+                    "blockIndex": block_no,
+                })
 
         pages.append({
             "page": page_num,
             "width": width,
             "height": height,
-            "blocks": text_blocks,
+            "blocks": extracted_blocks,
         })
 
     total_pages = len(doc)

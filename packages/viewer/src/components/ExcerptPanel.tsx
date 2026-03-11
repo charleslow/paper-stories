@@ -58,7 +58,7 @@ function ExcerptCard({ excerpt, pdfUrl }: { excerpt: Excerpt; pdfUrl?: string })
     <div className={`excerpt-card excerpt-type-${excerpt.type}`}>
       <div className="excerpt-header">
         <span className="excerpt-type-badge">
-          {excerpt.type === 'equation' ? '∑ Equation' : '¶ Text'}
+          {excerpt.type === 'equation' ? '∑ Equation' : excerpt.type === 'figure' ? '▭ Figure' : '¶ Text'}
         </span>
         {excerpt.label && <span className="excerpt-label">{excerpt.label}</span>}
         {excerpt.sourceFile && (
@@ -71,20 +71,36 @@ function ExcerptCard({ excerpt, pdfUrl }: { excerpt: Excerpt; pdfUrl?: string })
         )}
       </div>
 
-      <div className="excerpt-content">
-        {excerpt.type === 'equation' ? (
-          <MathRenderer math={excerpt.content} display={true} />
-        ) : (
-          <blockquote className="excerpt-text">{excerpt.content}</blockquote>
-        )}
-      </div>
-
-      {pdfUrl && excerpt.pdfRegion && (
-        <PdfRegionViewer
-          pdfUrl={pdfUrl}
-          page={excerpt.pdfRegion.page}
-          bbox={excerpt.pdfRegion.bbox}
-        />
+      {excerpt.type === 'figure' && pdfUrl && excerpt.pdfRegion ? (
+        <>
+          <PdfRegionViewer
+            pdfUrl={pdfUrl}
+            page={excerpt.pdfRegion.page}
+            bbox={excerpt.pdfRegion.bbox}
+          />
+          {excerpt.content && (
+            <div className="excerpt-content">
+              <p className="excerpt-caption">{excerpt.content}</p>
+            </div>
+          )}
+        </>
+      ) : (
+        <>
+          <div className="excerpt-content">
+            {excerpt.type === 'equation' ? (
+              <MathRenderer math={excerpt.content} display={true} />
+            ) : (
+              <blockquote className="excerpt-text">{excerpt.content}</blockquote>
+            )}
+          </div>
+          {pdfUrl && excerpt.pdfRegion && (
+            <PdfRegionViewer
+              pdfUrl={pdfUrl}
+              page={excerpt.pdfRegion.page}
+              bbox={excerpt.pdfRegion.bbox}
+            />
+          )}
+        </>
       )}
 
       <button

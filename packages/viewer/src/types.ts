@@ -6,7 +6,7 @@ export interface PdfRegion {
 export interface Excerpt {
   content: string;
   latexSource: string;
-  type: 'text' | 'equation';
+  type: 'text' | 'equation' | 'figure';
   sourceFile: string;
   label: string;
   pdfRegion?: PdfRegion;  // Optional PDF bounding box for the excerpt

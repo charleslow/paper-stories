@@ -31,7 +31,7 @@ export function validateStory(story) {
       if (!ex.content || !ex.type || !ex.latexSource) {
         throw new Error(`Chapter ${ch.id} has excerpt missing content/type/latexSource`);
       }
-      if (!['text', 'equation'].includes(ex.type)) {
+      if (!['text', 'equation', 'figure'].includes(ex.type)) {
         throw new Error(`Chapter ${ch.id} has invalid excerpt type: ${ex.type}`);
       }
       if (ex.pdfRegion) {
