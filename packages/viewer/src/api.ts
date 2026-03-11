@@ -69,6 +69,25 @@ export async function resolvePdfUrl(storyUrl: string): Promise<string | null> {
   return null;
 }
 
+// Local story discovery
+export interface LocalStory {
+  id: string;
+  title: string;
+  arxivId: string | null;
+  createdAt: string | null;
+  url: string;
+}
+
+export async function fetchLocalStories(): Promise<LocalStory[]> {
+  try {
+    const res = await fetch('local-stories/_discover');
+    if (!res.ok) return [];
+    return await res.json();
+  } catch {
+    return [];
+  }
+}
+
 function validateStory(data: unknown): asserts data is Story {
   const story = data as Record<string, unknown>;
 

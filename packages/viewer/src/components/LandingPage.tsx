@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { fetchLocalStories, type LocalStory } from '../api';
 
 interface RecentStory {
   url: string;
@@ -10,12 +11,14 @@ interface RecentStory {
 export default function LandingPage() {
   const [input, setInput] = useState('');
   const [recent, setRecent] = useState<RecentStory[]>([]);
+  const [localStories, setLocalStories] = useState<LocalStory[]>([]);
 
   useEffect(() => {
     try {
       const stored = JSON.parse(localStorage.getItem('paper-stories-recent') || '[]');
       setRecent(stored);
     } catch { /* ignore */ }
+    fetchLocalStories().then(setLocalStories);
   }, []);
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -69,6 +72,27 @@ export default function LandingPage() {
             <li><code>https://...story.json</code> — direct URL</li>
           </ul>
         </div>
+
+        {localStories.length > 0 && (
+          <div className="landing-recent">
+            <h3>Local Stories</h3>
+            <ul>
+              {localStories.map((story) => (
+                <li key={story.id}>
+                  <a href={`?url=${encodeURIComponent(story.url)}`}>
+                    {story.title}
+                    {story.arxivId && <span className="recent-arxiv"> ({story.arxivId})</span>}
+                  </a>
+                  {story.createdAt && (
+                    <span className="recent-date">
+                      {new Date(story.createdAt).toLocaleDateString()}
+                    </span>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
 
         {recent.length > 0 && (
           <div className="landing-recent">
