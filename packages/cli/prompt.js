@@ -167,7 +167,6 @@ Assemble everything into a single story.json file.
   "title": "<Paper title — concise, may be shortened>",
   "arxivId": "${arxivId}",
   "arxivUrl": "${arxivUrl}",
-  "pdfUrl": "https://arxiv.org/pdf/${arxivId}",
   "query": ${JSON.stringify(query || null)},
   "createdAt": "<ISO-8601 timestamp>",
   "chapters": [

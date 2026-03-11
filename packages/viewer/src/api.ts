@@ -52,6 +52,23 @@ export async function fetchStory(url: string): Promise<Story> {
   }
 }
 
+/**
+ * Check if a PDF exists alongside the story JSON (same path, .pdf extension).
+ * Returns the PDF URL if it exists, or null.
+ */
+export async function resolvePdfUrl(storyUrl: string): Promise<string | null> {
+  const pdfUrl = storyUrl.replace(/\.json$/, '.pdf');
+  try {
+    const response = await fetch(pdfUrl, { method: 'HEAD' });
+    if (response.ok) {
+      return pdfUrl;
+    }
+  } catch {
+    // PDF not available
+  }
+  return null;
+}
+
 function validateStory(data: unknown): asserts data is Story {
   const story = data as Record<string, unknown>;
 

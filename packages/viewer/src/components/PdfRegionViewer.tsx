@@ -4,15 +4,34 @@ import pdfjsWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorkerUrl;
 
-// Cache loaded PDF documents by URL
+// Cache loaded PDF documents by URL (LRU, capped at MAX_CACHED_DOCS)
+const MAX_CACHED_DOCS = 5;
 const docCache = new Map<string, Promise<pdfjsLib.PDFDocumentProxy>>();
 
 function getPdfDocument(url: string): Promise<pdfjsLib.PDFDocumentProxy> {
   let cached = docCache.get(url);
-  if (!cached) {
-    cached = pdfjsLib.getDocument(url).promise;
+  if (cached) {
+    // Move to end so the most-recently-used entry is last (LRU order)
+    docCache.delete(url);
     docCache.set(url, cached);
+    return cached;
   }
+
+  cached = pdfjsLib.getDocument(url).promise;
+  cached.catch(() => {
+    // Remove rejected promises so subsequent calls can retry
+    docCache.delete(url);
+  });
+  docCache.set(url, cached);
+
+  // Evict oldest entries when cache exceeds the cap
+  while (docCache.size > MAX_CACHED_DOCS) {
+    const oldest = docCache.keys().next().value!;
+    const evicted = docCache.get(oldest)!;
+    docCache.delete(oldest);
+    evicted.then(doc => doc.destroy()).catch(() => {});
+  }
+
   return cached;
 }
 
@@ -33,6 +52,7 @@ export default function PdfRegionViewer({ pdfUrl, page, bbox }: PdfRegionViewerP
   const highlightRef = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(DEFAULT_SCALE);
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [x0, y0, x1, y1] = bbox;
 
   const renderPage = useCallback(async (currentScale: number) => {
     const canvas = canvasRef.current;
@@ -55,7 +75,6 @@ export default function PdfRegionViewer({ pdfUrl, page, bbox }: PdfRegionViewerP
       }).promise;
 
       // Position highlight overlay
-      const [x0, y0, x1, y1] = bbox;
       highlight.style.left = `${x0 * viewport.width}px`;
       highlight.style.top = `${y0 * viewport.height}px`;
       highlight.style.width = `${(x1 - x0) * viewport.width}px`;
@@ -76,7 +95,7 @@ export default function PdfRegionViewer({ pdfUrl, page, bbox }: PdfRegionViewerP
     } catch {
       setStatus('error');
     }
-  }, [pdfUrl, page, bbox]);
+  }, [pdfUrl, page, x0, y0, x1, y1]);
 
   useEffect(() => {
     renderPage(scale);
