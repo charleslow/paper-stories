@@ -75,6 +75,7 @@ export interface LocalStory {
   title: string;
   arxivId: string | null;
   createdAt: string | null;
+  modifiedAt: string | null;
   url: string;
 }
 
