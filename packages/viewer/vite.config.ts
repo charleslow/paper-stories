@@ -30,7 +30,7 @@ try {
 function runClaude(prompt: string): Promise<string> {
   console.log('[chat] Spawning claude binary:', claudeBin)
   return new Promise((resolve, reject) => {
-    const proc = execFile(claudeBin, ['-p', prompt, '--no-input'], {
+    const proc = execFile(claudeBin, ['-p', prompt], {
       timeout: 120000,
       maxBuffer: 1024 * 1024,
     }, (error, stdout, stderr) => {
