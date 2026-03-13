@@ -19,37 +19,42 @@ function jsonResponse(res: ServerResponse, data: unknown, status = 200) {
   res.end(JSON.stringify(data))
 }
 
-function isClaudeAvailable(): boolean {
+// Resolve the absolute path to the claude binary once at startup.
+// This avoids ENOENT errors when the Node process inherits a limited PATH
+// (e.g. launched from systemd, an IDE, or a web-based environment).
+function resolveClaudePath(): string | null {
   try {
-    execFileSync('claude', ['--version'], { timeout: 5000, stdio: 'pipe' })
-    return true
+    return execFileSync('which', ['claude'], { timeout: 5000, stdio: 'pipe', encoding: 'utf-8' }).trim()
   } catch {
-    return false
+    // 'which' not available (Windows) or claude not found — try common locations
+    const candidates = [
+      path.join(process.env.HOME || '', '.npm-global/bin/claude'),
+      '/usr/local/bin/claude',
+      '/usr/bin/claude',
+    ]
+    for (const p of candidates) {
+      try {
+        execFileSync(p, ['--version'], { timeout: 5000, stdio: 'pipe' })
+        return p
+      } catch { /* continue */ }
+    }
+    return null
   }
 }
 
-let claudeAvailable: boolean | null = null
-
-function checkClaudeAvailable(): boolean {
-  if (claudeAvailable === null) {
-    claudeAvailable = isClaudeAvailable()
-  }
-  return claudeAvailable
-}
+const claudePath = resolveClaudePath()
 
 function runClaude(prompt: string): Promise<string> {
+  if (!claudePath) {
+    return Promise.reject(new Error('Claude CLI not found. Install it with: npm install -g @anthropic-ai/claude-code'))
+  }
   return new Promise((resolve, reject) => {
-    execFile('claude', ['-p', prompt, '--no-input'], {
+    execFile(claudePath, ['-p', prompt, '--no-input'], {
       timeout: 120000,
       maxBuffer: 1024 * 1024,
     }, (error, stdout, stderr) => {
       if (error) {
-        if ('code' in error && error.code === 'ENOENT') {
-          claudeAvailable = false
-          reject(new Error('Claude CLI not found. Install it with: npm install -g @anthropic-ai/claude-code'))
-        } else {
-          reject(new Error(stderr || error.message))
-        }
+        reject(new Error(stderr || error.message))
       } else {
         resolve(stdout.trim())
       }
@@ -116,7 +121,7 @@ async function readStoryFile(storiesDir: string, storyId: string) {
 async function handleRequest(req: Connect.IncomingMessage, res: ServerResponse, next: Connect.NextFunction, storiesDir: string) {
   // Chat availability check
   if (req.url === '/_chat/available') {
-    return jsonResponse(res, { available: checkClaudeAvailable() })
+    return jsonResponse(res, { available: claudePath !== null })
   }
 
   // Chat history: GET /_chat/:storyId
