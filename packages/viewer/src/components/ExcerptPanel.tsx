@@ -1,4 +1,7 @@
 import { useState } from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
 import { Excerpt } from '../types';
 import MathRenderer from './MathRenderer';
 import PdfRegionViewer from './PdfRegionViewer';
@@ -51,6 +54,8 @@ export default function ExcerptPanel({ excerpts, pdfUrl, storyMeta }: ExcerptPan
   );
 }
 
+const excerptAllowedElements = ['p', 'span', 'div', 'em', 'strong', 'sub', 'sup', 'br'];
+
 function ExcerptCard({ excerpt, pdfUrl }: { excerpt: Excerpt; pdfUrl?: string }) {
   const [showSource, setShowSource] = useState(false);
 
@@ -79,8 +84,15 @@ function ExcerptCard({ excerpt, pdfUrl }: { excerpt: Excerpt; pdfUrl?: string })
             bbox={excerpt.pdfRegion.bbox}
           />
           {excerpt.content && (
-            <div className="excerpt-content">
-              <p className="excerpt-caption">{excerpt.content}</p>
+            <div className="excerpt-content excerpt-caption">
+              <ReactMarkdown
+                remarkPlugins={[remarkMath]}
+                rehypePlugins={[rehypeKatex]}
+                allowedElements={excerptAllowedElements}
+                unwrapDisallowed={true}
+              >
+                {excerpt.content}
+              </ReactMarkdown>
             </div>
           )}
         </>
@@ -90,7 +102,16 @@ function ExcerptCard({ excerpt, pdfUrl }: { excerpt: Excerpt; pdfUrl?: string })
             {excerpt.type === 'equation' ? (
               <MathRenderer math={excerpt.content} display={true} />
             ) : (
-              <blockquote className="excerpt-text">{excerpt.content}</blockquote>
+              <blockquote className="excerpt-text">
+                <ReactMarkdown
+                  remarkPlugins={[remarkMath]}
+                  rehypePlugins={[rehypeKatex]}
+                  allowedElements={excerptAllowedElements}
+                  unwrapDisallowed={true}
+                >
+                  {excerpt.content}
+                </ReactMarkdown>
+              </blockquote>
             )}
           </div>
           {pdfUrl && excerpt.pdfRegion && (

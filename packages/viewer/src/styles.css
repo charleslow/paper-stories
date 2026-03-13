@@ -365,6 +365,15 @@ html, body {
   font-style: italic;
 }
 
+.excerpt-text p {
+  margin: 0;
+}
+
+.excerpt-text .katex {
+  font-size: 1em;
+  font-style: normal;
+}
+
 /* Equation excerpts */
 .excerpt-type-equation .excerpt-content {
   background: var(--equation-bg);
@@ -385,6 +394,11 @@ html, body {
   padding: 0;
   margin: 0;
   font-style: italic;
+}
+
+.excerpt-type-figure .excerpt-caption .katex {
+  font-style: normal;
+  font-size: 1em;
 }
 
 /* PDF Region Viewer */
