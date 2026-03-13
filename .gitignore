@@ -3,3 +3,4 @@ dist/
 .paper-stories-tmp/
 *.tgz
 .DS_Store
+*.chat.json
