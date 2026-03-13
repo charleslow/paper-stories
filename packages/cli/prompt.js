@@ -92,9 +92,12 @@ End the file with: OUTLINE_COMPLETE
 For each chapter, find and collect excerpts from the source:
 
 Each excerpt should be one of:
-- **text**: A key paragraph, definition, or claim from the paper
-- **equation**: A mathematical equation or formula
+- **text**: A key paragraph, definition, or claim from the paper (may contain inline or display math)
+- **equation**: A PURE mathematical equation or formula — contains ONLY math, no surrounding prose
 - **figure**: A diagram, chart, table, or illustration from the paper
+
+**IMPORTANT — choosing between text and equation types:**
+If an excerpt mixes prose with math (e.g., a sentence defining a variable followed by an equation, or a paragraph that includes inline math expressions), it MUST be typed as "text", NOT "equation". The "equation" type is ONLY for excerpts whose entire content is a mathematical expression — no natural-language sentences surrounding it. When in doubt, use "text". The text renderer supports both inline math (\`$...$\`) and display math (\`$$...$$\`), so equations embedded in prose will render correctly as text excerpts.
 
 For EACH excerpt you collect:
 1. Read the source .tex file containing it
@@ -104,13 +107,14 @@ For EACH excerpt you collect:
 
 **Text excerpts**: \`content\` should be readable text — remove \\cite{}, \\ref{}, \\label{} etc., but KEEP inline math expressions (e.g. \`$\\lambda$\`, \`$x^2$\`, \`$\\text{Text} \\rightarrow \\text{Code}$\`). The viewer renders these with KaTeX. Keep \`latexSource\` as the raw version.
 
-**Equation excerpts**: \`content\` should be **clean KaTeX-compatible LaTeX** that renders correctly. You may adapt from the raw source:
+**Equation excerpts**: \`content\` should be **clean KaTeX-compatible LaTeX** that renders correctly. The content must be PURE math — no prose text, no sentences. You may adapt from the raw source:
 - Strip \\begin{equation}/\\end{equation} and similar environments — just the math content
 - Remove \\label{}, \\tag{}, \\nonumber
 - Replace unsupported macros with KaTeX equivalents
 - Use \\begin{aligned}...\\end{aligned} for multi-line equations
 - The equation does NOT need to be an exact string match of the source, but MUST be mathematically equivalent
 - Keep \`latexSource\` as the raw verbatim copy from the .tex file
+- If the source passage mixes prose with equations (e.g., "We define X as ... [equation]"), use type "text" instead and embed the math with $...$ or $$...$$ delimiters
 
 **Figure excerpts**: For diagrams, charts, tables, and illustrations:
 - \`content\` should be the figure's caption text (cleaned of LaTeX artifacts, like text excerpts)
