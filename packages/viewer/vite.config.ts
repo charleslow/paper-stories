@@ -3,7 +3,7 @@ import { defineConfig, type Connect } from 'vite'
 import react from '@vitejs/plugin-react'
 import path from 'path'
 import fs from 'fs/promises'
-import { execFile } from 'child_process'
+import { execFile, execFileSync } from 'child_process'
 import type { ServerResponse } from 'http'
 import { isSafeId, readBody, buildChatPrompt, withFileLock } from './chat-utils'
 
@@ -19,6 +19,24 @@ function jsonResponse(res: ServerResponse, data: unknown, status = 200) {
   res.end(JSON.stringify(data))
 }
 
+function isClaudeAvailable(): boolean {
+  try {
+    execFileSync('claude', ['--version'], { timeout: 5000, stdio: 'pipe' })
+    return true
+  } catch {
+    return false
+  }
+}
+
+let claudeAvailable: boolean | null = null
+
+function checkClaudeAvailable(): boolean {
+  if (claudeAvailable === null) {
+    claudeAvailable = isClaudeAvailable()
+  }
+  return claudeAvailable
+}
+
 function runClaude(prompt: string): Promise<string> {
   return new Promise((resolve, reject) => {
     execFile('claude', ['-p', prompt, '--no-input'], {
@@ -26,7 +44,12 @@ function runClaude(prompt: string): Promise<string> {
       maxBuffer: 1024 * 1024,
     }, (error, stdout, stderr) => {
       if (error) {
-        reject(new Error(stderr || error.message))
+        if ('code' in error && error.code === 'ENOENT') {
+          claudeAvailable = false
+          reject(new Error('Claude CLI not found. Install it with: npm install -g @anthropic-ai/claude-code'))
+        } else {
+          reject(new Error(stderr || error.message))
+        }
       } else {
         resolve(stdout.trim())
       }
@@ -93,7 +116,7 @@ async function readStoryFile(storiesDir: string, storyId: string) {
 async function handleRequest(req: Connect.IncomingMessage, res: ServerResponse, next: Connect.NextFunction, storiesDir: string) {
   // Chat availability check
   if (req.url === '/_chat/available') {
-    return jsonResponse(res, { available: true })
+    return jsonResponse(res, { available: checkClaudeAvailable() })
   }
 
   // Chat history: GET /_chat/:storyId
