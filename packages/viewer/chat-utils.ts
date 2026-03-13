@@ -46,13 +46,15 @@ export interface BuildChatPromptInput {
   overviewChapter: { label: string; explanation: string } | null
   totalChapters: number
   history: { role: string; content: string }[]
+  storyFile: string
+  pdfFile: string | null
 }
 
 export function buildChatPrompt(input: BuildChatPromptInput): string {
   const {
     message, title, arxivId,
     currentChapter, prevChapter, nextChapter, overviewChapter,
-    totalChapters, history,
+    totalChapters, history, storyFile, pdfFile,
   } = input
 
   const lines: string[] = []
@@ -111,6 +113,13 @@ export function buildChatPrompt(input: BuildChatPromptInput): string {
     lines.push(``)
   }
 
+  lines.push(`You have access to the Read tool. If you need more context to answer the question:`)
+  lines.push(`- Full story JSON (all chapters): ${storyFile}`)
+  if (pdfFile) {
+    lines.push(`- Original paper PDF: ${pdfFile}`)
+  }
+  lines.push(`Only read these files if the provided context above is insufficient.`)
+  lines.push(``)
   lines.push(`Reader's question: ${message}`)
   lines.push(``)
   lines.push(`Respond concisely. Use $...$ for inline math and $$...$$ for display math.`)
