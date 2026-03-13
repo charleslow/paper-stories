@@ -3,7 +3,7 @@ import { defineConfig, type Connect } from 'vite'
 import react from '@vitejs/plugin-react'
 import path from 'path'
 import fs from 'fs/promises'
-import { execFile } from 'child_process'
+import { execFile, execFileSync } from 'child_process'
 import type { ServerResponse } from 'http'
 import { isSafeId, readBody, buildChatPrompt, withFileLock } from './chat-utils'
 
@@ -19,9 +19,37 @@ function jsonResponse(res: ServerResponse, data: unknown, status = 200) {
   res.end(JSON.stringify(data))
 }
 
+// Resolve the absolute path to the claude binary once at startup.
+// This avoids ENOENT errors when the Node process inherits a limited PATH
+// (e.g. launched from systemd, an IDE, or a web-based environment).
+function resolveClaudePath(): string | null {
+  try {
+    return execFileSync('which', ['claude'], { timeout: 5000, stdio: 'pipe', encoding: 'utf-8' }).trim()
+  } catch {
+    // 'which' not available (Windows) or claude not found — try common locations
+    const candidates = [
+      path.join(process.env.HOME || '', '.npm-global/bin/claude'),
+      '/usr/local/bin/claude',
+      '/usr/bin/claude',
+    ]
+    for (const p of candidates) {
+      try {
+        execFileSync(p, ['--version'], { timeout: 5000, stdio: 'pipe' })
+        return p
+      } catch { /* continue */ }
+    }
+    return null
+  }
+}
+
+const claudePath = resolveClaudePath()
+
 function runClaude(prompt: string): Promise<string> {
+  if (!claudePath) {
+    return Promise.reject(new Error('Claude CLI not found. Install it with: npm install -g @anthropic-ai/claude-code'))
+  }
   return new Promise((resolve, reject) => {
-    execFile('claude', ['-p', prompt, '--no-input'], {
+    execFile(claudePath, ['-p', prompt, '--no-input'], {
       timeout: 120000,
       maxBuffer: 1024 * 1024,
     }, (error, stdout, stderr) => {
@@ -93,7 +121,7 @@ async function readStoryFile(storiesDir: string, storyId: string) {
 async function handleRequest(req: Connect.IncomingMessage, res: ServerResponse, next: Connect.NextFunction, storiesDir: string) {
   // Chat availability check
   if (req.url === '/_chat/available') {
-    return jsonResponse(res, { available: true })
+    return jsonResponse(res, { available: claudePath !== null })
   }
 
   // Chat history: GET /_chat/:storyId
