@@ -21,7 +21,7 @@ export default function App() {
       Promise.all([fetchStory(storyUrl), resolvePdfUrl(storyUrl)])
         .then(([story, pdfUrl]) => {
           setState({ status: 'ready', story, currentChapter: 0, pdfUrl });
-          saveRecent(story);
+
         })
         .catch(err => {
           setState({ status: 'error', message: err.message });
@@ -121,22 +121,4 @@ export default function App() {
       />
     </div>
   );
-}
-
-function saveRecent(story: Story) {
-  try {
-    const key = 'paper-stories-recent';
-    const existing = JSON.parse(localStorage.getItem(key) || '[]');
-    const entry = {
-      url: window.location.href,
-      title: story.title,
-      arxivId: story.arxivId,
-      accessedAt: new Date().toISOString(),
-    };
-    const filtered = existing.filter((e: { url: string }) => e.url !== entry.url);
-    filtered.unshift(entry);
-    localStorage.setItem(key, JSON.stringify(filtered.slice(0, 10)));
-  } catch {
-    // localStorage might be unavailable
-  }
 }
