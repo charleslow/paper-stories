@@ -19,10 +19,9 @@ function jsonResponse(res: ServerResponse, data: unknown, status = 200) {
   res.end(JSON.stringify(data))
 }
 
-function runClaude(prompt: string): Promise<string> {
-  console.log('[chat] Spawning claude with PATH:', process.env.PATH)
+function runClaude(prompt: string, storiesDir: string): Promise<string> {
   return new Promise((resolve, reject) => {
-    const proc = execFile('claude', ['-p', prompt, '--no-input'], {
+    const proc = execFile('claude', ['-p', prompt, '--allowedTools', 'Read', '--add-dir', storiesDir], {
       timeout: 120000,
       maxBuffer: 1024 * 1024,
     }, (error, stdout, stderr) => {
@@ -165,6 +164,11 @@ async function handleRequest(req: Connect.IncomingMessage, res: ServerResponse, 
         const chatData = await readChatFile(chatPath, storyId)
         const history = chatData.chapters[chapterId] || []
 
+        const storyFile = path.join(storiesDir, `${filename}.json`)
+        const pdfCandidate = path.join(storiesDir, `${filename}.pdf`)
+        let pdfFile: string | null = null
+        try { await fs.access(pdfCandidate); pdfFile = pdfCandidate } catch {}
+
         const prompt = buildChatPrompt({
           message: body.message,
           title: story.title,
@@ -175,9 +179,11 @@ async function handleRequest(req: Connect.IncomingMessage, res: ServerResponse, 
           overviewChapter,
           totalChapters: story.chapters.length,
           history,
+          storyFile,
+          pdfFile,
         })
 
-        const aiReply = await runClaude(prompt)
+        const aiReply = await runClaude(prompt, storiesDir)
 
         const now = new Date().toISOString()
         if (!chatData.chapters[chapterId]) {
