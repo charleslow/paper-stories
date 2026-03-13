@@ -2,44 +2,50 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
-import { ChatMessage, Chapter } from '../types';
-import { sendChatMessage, fetchChatHistory, ChatContext } from '../api';
+import { ChatMessage } from '../types';
+import { sendChatMessage, fetchChatHistory } from '../api';
 
 interface ChatPanelProps {
   storyId: string;
-  chapter: Chapter;
-  chapters: Chapter[];
-  chapterIndex: number;
-  storyTitle: string;
-  arxivId: string;
+  chapterId: string;
 }
 
 export default function ChatPanel({
   storyId,
-  chapter,
-  chapters,
-  chapterIndex,
-  storyTitle,
-  arxivId,
+  chapterId,
 }: ChatPanelProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(false);
+  const [historyLoaded, setHistoryLoaded] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  // Load chat history when chapter changes
+  // Reset messages when chapter changes while collapsed
   useEffect(() => {
+    if (!expanded) {
+      setMessages([]);
+      setHistoryLoaded(null);
+    }
+  }, [chapterId, expanded]);
+
+  // Load chat history only when expanded AND history not yet loaded for this chapter
+  useEffect(() => {
+    if (!expanded) return;
+    const key = `${storyId}:${chapterId}`;
+    if (historyLoaded === key) return;
+
     let cancelled = false;
     fetchChatHistory(storyId).then(chatData => {
       if (!cancelled) {
-        setMessages(chatData.chapters[chapter.id] || []);
+        setMessages(chatData.chapters[chapterId] || []);
+        setHistoryLoaded(key);
       }
     });
     return () => { cancelled = true; };
-  }, [storyId, chapter.id]);
+  }, [storyId, chapterId, expanded, historyLoaded]);
 
   // Auto-scroll to bottom on new messages
   useEffect(() => {
@@ -68,21 +74,8 @@ export default function ChatPanel({
     };
     setMessages(prev => [...prev, userMsg]);
 
-    const context: ChatContext = {
-      title: storyTitle,
-      arxivId,
-      currentChapter: chapter,
-      prevChapter: chapterIndex > 0
-        ? { label: chapters[chapterIndex - 1].label, explanation: chapters[chapterIndex - 1].explanation }
-        : null,
-      nextChapter: chapterIndex < chapters.length - 1
-        ? { label: chapters[chapterIndex + 1].label, explanation: chapters[chapterIndex + 1].explanation }
-        : null,
-      totalChapters: chapters.length,
-    };
-
     try {
-      const reply = await sendChatMessage(storyId, chapter.id, trimmed, context);
+      const reply = await sendChatMessage(storyId, chapterId, trimmed);
       const assistantMsg: ChatMessage = {
         role: 'assistant',
         content: reply,
@@ -94,7 +87,7 @@ export default function ChatPanel({
     } finally {
       setLoading(false);
     }
-  }, [input, loading, storyId, chapter, chapters, chapterIndex, storyTitle, arxivId]);
+  }, [input, loading, storyId, chapterId]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -127,7 +120,7 @@ export default function ChatPanel({
       <div className="chat-messages">
         {messages.length === 0 && !loading && (
           <div className="chat-empty">
-            Ask a question about this chapter. Claude has context on the current, previous, and next chapters.
+            Ask a question about this chapter. Claude has context on the current, previous, and next chapters, plus the paper overview.
           </div>
         )}
         {messages.map((msg, i) => (

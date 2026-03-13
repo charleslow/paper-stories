@@ -130,11 +130,7 @@ export default function ChapterDisplay({
             <div className="chat-panel-fullscreen">
               <ChatPanel
                 storyId={storyId}
-                chapter={chapter}
-                chapters={chapters}
-                chapterIndex={chapterIndex}
-                storyTitle={storyMeta.title}
-                arxivId={storyMeta.arxivId}
+                chapterId={chapter.id}
               />
             </div>
           ) : (
@@ -155,11 +151,7 @@ export default function ChapterDisplay({
             {chatAvailable && (
               <ChatPanel
                 storyId={storyId}
-                chapter={chapter}
-                chapters={chapters}
-                chapterIndex={chapterIndex}
-                storyTitle={storyMeta.title}
-                arxivId={storyMeta.arxivId}
+                chapterId={chapter.id}
               />
             )}
           </div>

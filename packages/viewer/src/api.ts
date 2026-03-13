@@ -1,4 +1,4 @@
-import { Story, StoryChat, Chapter } from './types';
+import { Story, StoryChat } from './types';
 
 /**
  * Parse URL parameters to determine where to fetch the story from.
@@ -111,27 +111,17 @@ export async function fetchChatHistory(storyId: string): Promise<StoryChat> {
   }
 }
 
-export interface ChatContext {
-  title: string;
-  arxivId: string;
-  currentChapter: Chapter;
-  prevChapter: { label: string; explanation: string } | null;
-  nextChapter: { label: string; explanation: string } | null;
-  totalChapters: number;
-}
-
 export async function sendChatMessage(
   storyId: string,
   chapterId: string,
   message: string,
-  context: ChatContext,
 ): Promise<string> {
   const res = await fetch(
     `/local-stories/_chat/${encodeURIComponent(storyId)}/${encodeURIComponent(chapterId)}`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message, context }),
+      body: JSON.stringify({ message }),
     },
   );
 
