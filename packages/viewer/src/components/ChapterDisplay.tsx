@@ -2,13 +2,17 @@ import { useState, useCallback, useEffect } from 'react';
 import { Chapter } from '../types';
 import ExcerptPanel from './ExcerptPanel';
 import ExplanationPanel from './ExplanationPanel';
+import ChatPanel from './ChatPanel';
 
 interface ChapterDisplayProps {
   chapter: Chapter;
+  chapters: Chapter[];
   chapterIndex: number;
   totalChapters: number;
   onNavigate: (index: number) => void;
   pdfUrl?: string;
+  chatAvailable: boolean;
+  storyId: string;
   storyMeta: {
     title: string;
     arxivId: string;
@@ -19,15 +23,18 @@ interface ChapterDisplayProps {
 
 export default function ChapterDisplay({
   chapter,
+  chapters,
   chapterIndex,
   totalChapters,
   onNavigate,
   pdfUrl,
+  chatAvailable,
+  storyId,
   storyMeta,
 }: ChapterDisplayProps) {
   const [splitPercent, setSplitPercent] = useState(40);
   const [isDragging, setIsDragging] = useState(false);
-  const [activeTab, setActiveTab] = useState<'excerpts' | 'explanation'>('explanation');
+  const [activeTab, setActiveTab] = useState<'excerpts' | 'explanation' | 'chat'>('explanation');
   const [isMobile, setIsMobile] = useState(false);
 
   // Detect mobile
@@ -104,6 +111,14 @@ export default function ChapterDisplay({
           >
             Explanation
           </button>
+          {chatAvailable && (
+            <button
+              className={`tab ${activeTab === 'chat' ? 'active' : ''}`}
+              onClick={() => setActiveTab('chat')}
+            >
+              Chat
+            </button>
+          )}
         </div>
       )}
 
@@ -111,6 +126,17 @@ export default function ChapterDisplay({
         <div className="chapter-panels-mobile">
           {activeTab === 'excerpts' ? (
             <ExcerptPanel excerpts={chapter.excerpts} pdfUrl={pdfUrl} storyMeta={storyMeta} />
+          ) : activeTab === 'chat' && chatAvailable ? (
+            <div className="chat-panel-fullscreen">
+              <ChatPanel
+                storyId={storyId}
+                chapter={chapter}
+                chapters={chapters}
+                chapterIndex={chapterIndex}
+                storyTitle={storyMeta.title}
+                arxivId={storyMeta.arxivId}
+              />
+            </div>
           ) : (
             <ExplanationPanel explanation={chapter.explanation} />
           )}
@@ -126,6 +152,16 @@ export default function ChapterDisplay({
           />
           <div className="panel-right" style={{ width: `${100 - splitPercent}%` }}>
             <ExplanationPanel explanation={chapter.explanation} />
+            {chatAvailable && (
+              <ChatPanel
+                storyId={storyId}
+                chapter={chapter}
+                chapters={chapters}
+                chapterIndex={chapterIndex}
+                storyTitle={storyMeta.title}
+                arxivId={storyMeta.arxivId}
+              />
+            )}
           </div>
         </div>
       )}

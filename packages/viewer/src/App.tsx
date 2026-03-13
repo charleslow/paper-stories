@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Story } from './types';
-import { parseStoryUrl, fetchStory, resolvePdfUrl } from './api';
+import { parseStoryUrl, fetchStory, resolvePdfUrl, checkChatAvailable } from './api';
 import Sidebar from './components/Sidebar';
 import ChapterDisplay from './components/ChapterDisplay';
 import LandingPage from './components/LandingPage';
@@ -9,7 +9,7 @@ type AppState =
   | { status: 'landing' }
   | { status: 'loading'; url: string }
   | { status: 'error'; message: string }
-  | { status: 'ready'; story: Story; currentChapter: number; pdfUrl: string | null };
+  | { status: 'ready'; story: Story; currentChapter: number; pdfUrl: string | null; chatAvailable: boolean };
 
 export default function App() {
   const [state, setState] = useState<AppState>({ status: 'landing' });
@@ -18,9 +18,9 @@ export default function App() {
     const { storyUrl } = parseStoryUrl();
     if (storyUrl) {
       setState({ status: 'loading', url: storyUrl });
-      Promise.all([fetchStory(storyUrl), resolvePdfUrl(storyUrl)])
-        .then(([story, pdfUrl]) => {
-          setState({ status: 'ready', story, currentChapter: 0, pdfUrl });
+      Promise.all([fetchStory(storyUrl), resolvePdfUrl(storyUrl), checkChatAvailable()])
+        .then(([story, pdfUrl, chatAvailable]) => {
+          setState({ status: 'ready', story, currentChapter: 0, pdfUrl, chatAvailable });
           saveRecent(story);
         })
         .catch(err => {
@@ -94,7 +94,7 @@ export default function App() {
     );
   }
 
-  const { story, currentChapter, pdfUrl } = state;
+  const { story, currentChapter, pdfUrl, chatAvailable } = state;
   const chapter = story.chapters[currentChapter];
 
   return (
@@ -108,10 +108,13 @@ export default function App() {
       />
       <ChapterDisplay
         chapter={chapter}
+        chapters={story.chapters}
         chapterIndex={currentChapter}
         totalChapters={story.chapters.length}
         onNavigate={navigateChapter}
         pdfUrl={pdfUrl ?? undefined}
+        chatAvailable={chatAvailable}
+        storyId={story.id}
         storyMeta={{
           title: story.title,
           arxivId: story.arxivId,

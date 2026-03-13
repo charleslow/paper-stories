@@ -28,3 +28,14 @@ export interface Story {
   createdAt: string;
   chapters: Chapter[];
 }
+
+export interface ChatMessage {
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp: string;
+}
+
+export interface StoryChat {
+  storyId: string;
+  chapters: Record<string, ChatMessage[]>;
+}
