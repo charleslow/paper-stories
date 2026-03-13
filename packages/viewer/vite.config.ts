@@ -3,7 +3,7 @@ import { defineConfig, type Connect } from 'vite'
 import react from '@vitejs/plugin-react'
 import path from 'path'
 import fs from 'fs/promises'
-import { execFile } from 'child_process'
+import { execFile, execFileSync } from 'child_process'
 import type { ServerResponse } from 'http'
 import { isSafeId, readBody, buildChatPrompt, withFileLock } from './chat-utils'
 
@@ -19,10 +19,18 @@ function jsonResponse(res: ServerResponse, data: unknown, status = 200) {
   res.end(JSON.stringify(data))
 }
 
+// Resolve the full path to the claude binary at startup so we don't depend on PATH at runtime
+let claudeBin: string
+try {
+  claudeBin = execFileSync('which', ['claude'], { encoding: 'utf-8' }).trim()
+} catch {
+  claudeBin = 'claude' // fallback to bare name
+}
+
 function runClaude(prompt: string): Promise<string> {
-  console.log('[chat] Spawning claude with PATH:', process.env.PATH)
+  console.log('[chat] Spawning claude binary:', claudeBin)
   return new Promise((resolve, reject) => {
-    const proc = execFile('claude', ['-p', prompt, '--no-input'], {
+    const proc = execFile(claudeBin, ['-p', prompt, '--no-input'], {
       timeout: 120000,
       maxBuffer: 1024 * 1024,
     }, (error, stdout, stderr) => {
