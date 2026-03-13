@@ -46,14 +46,48 @@ async function readChatFile(chatPath: string, storyId: string) {
   }
 }
 
+/**
+ * Resolve a storyId to its actual filename on disk.
+ * First tries `${storyId}.json` directly. If not found, scans the stories
+ * directory for a file whose internal `id` field matches storyId.
+ * Returns the base filename (without .json) used on disk.
+ */
+async function resolveStoryFilename(storiesDir: string, storyId: string): Promise<string> {
+  // Fast path: filename matches storyId
+  const directPath = path.join(storiesDir, `${storyId}.json`)
+  try {
+    await fs.access(directPath)
+    return storyId
+  } catch {
+    // File not found by name — scan for matching internal id
+  }
+
+  const allFiles = await fs.readdir(storiesDir)
+  const storyFiles = allFiles.filter(f => f.endsWith('.json') && f !== 'manifest.json' && !f.endsWith('.chat.json'))
+
+  for (const f of storyFiles) {
+    try {
+      const data = JSON.parse(await fs.readFile(path.join(storiesDir, f), 'utf-8'))
+      if (data.id === storyId) {
+        return f.replace(/\.json$/, '')
+      }
+    } catch {
+      // Skip unreadable files
+    }
+  }
+
+  throw new Error(`Story not found: ${storyId}`)
+}
+
 async function readStoryFile(storiesDir: string, storyId: string) {
-  const storyPath = path.join(storiesDir, `${storyId}.json`)
+  const filename = await resolveStoryFilename(storiesDir, storyId)
+  const storyPath = path.join(storiesDir, `${filename}.json`)
   const data = JSON.parse(await fs.readFile(storyPath, 'utf-8'))
-  return data as {
+  return { filename, data: data as {
     title: string
     arxivId: string
     chapters: { id: string; label: string; excerpts: { latexSource: string; type: string }[]; explanation: string }[]
-  }
+  }}
 }
 
 async function handleRequest(req: Connect.IncomingMessage, res: ServerResponse, next: Connect.NextFunction, storiesDir: string) {
@@ -69,7 +103,13 @@ async function handleRequest(req: Connect.IncomingMessage, res: ServerResponse, 
     if (!isSafeId(storyId)) {
       return jsonResponse(res, { error: 'Invalid story ID' }, 400)
     }
-    const chatPath = path.join(storiesDir, `${storyId}.chat.json`)
+    let filename: string
+    try {
+      filename = await resolveStoryFilename(storiesDir, storyId)
+    } catch {
+      return jsonResponse(res, { error: 'Story not found' }, 404)
+    }
+    const chatPath = path.join(storiesDir, `${filename}.chat.json`)
     const chatData = await readChatFile(chatPath, storyId)
     return jsonResponse(res, chatData)
   }
@@ -87,8 +127,6 @@ async function handleRequest(req: Connect.IncomingMessage, res: ServerResponse, 
       return jsonResponse(res, { error: 'Too many concurrent chat requests. Please wait.' }, 429)
     }
 
-    const chatPath = path.join(storiesDir, `${storyId}.chat.json`)
-
     activeChatRequests++
     try {
       const body = JSON.parse(await readBody(req))
@@ -97,7 +135,8 @@ async function handleRequest(req: Connect.IncomingMessage, res: ServerResponse, 
       }
 
       // Load story data from disk instead of trusting client-sent context
-      const story = await readStoryFile(storiesDir, storyId)
+      const { filename, data: story } = await readStoryFile(storiesDir, storyId)
+      const chatPath = path.join(storiesDir, `${filename}.chat.json`)
       const chapterIdx = story.chapters.findIndex(c => c.id === chapterId)
       if (chapterIdx === -1) {
         return jsonResponse(res, { error: 'Chapter not found' }, 404)
