@@ -396,6 +396,11 @@ html, body {
   font-style: italic;
 }
 
+.excerpt-type-figure .excerpt-caption .katex {
+  font-style: normal;
+  font-size: 1em;
+}
+
 /* PDF Region Viewer */
 .pdf-region-viewer {
   border-top: 1px solid var(--border-light);

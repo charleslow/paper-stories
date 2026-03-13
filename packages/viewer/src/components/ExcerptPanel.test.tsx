@@ -58,4 +58,70 @@ describe('ExcerptPanel', () => {
     }} />);
     expect(screen.getByText('Test Paper')).toBeInTheDocument();
   });
+
+  it('renders text excerpt with no math as plain text', () => {
+    const noMathExcerpt: Excerpt = {
+      content: 'This excerpt has no math at all.',
+      latexSource: 'This excerpt has no math at all.',
+      type: 'text',
+      sourceFile: 'main.tex',
+      label: 'Section 3',
+    };
+    const { container } = render(<ExcerptPanel excerpts={[noMathExcerpt]} />);
+    expect(screen.getByText('This excerpt has no math at all.')).toBeInTheDocument();
+    expect(container.querySelectorAll('.katex').length).toBe(0);
+  });
+
+  it('renders escaped dollar signs as literal text', () => {
+    const escapedExcerpt: Excerpt = {
+      content: 'The cost is \\$5 per unit.',
+      latexSource: 'The cost is \\$5 per unit.',
+      type: 'text',
+      sourceFile: 'main.tex',
+      label: 'Section 4',
+    };
+    const { container } = render(<ExcerptPanel excerpts={[escapedExcerpt]} />);
+    expect(container.querySelectorAll('.katex').length).toBe(0);
+  });
+
+  it('renders display math ($$...$$) in text excerpts', () => {
+    const displayMathExcerpt: Excerpt = {
+      content: 'The loss function is defined as:\n\n$$L = -\\sum_{i} y_i \\log(p_i)$$',
+      latexSource: 'The loss function is defined as:\n\n$$L = -\\sum_{i} y_i \\log(p_i)$$',
+      type: 'text',
+      sourceFile: 'main.tex',
+      label: 'Section 5',
+    };
+    const { container } = render(<ExcerptPanel excerpts={[displayMathExcerpt]} />);
+    const katexElements = container.querySelectorAll('.katex');
+    expect(katexElements.length).toBeGreaterThan(0);
+  });
+
+  it('renders inline math in figure captions', () => {
+    const figureExcerpt: Excerpt = {
+      content: 'Performance of $\\alpha$-tuning across datasets.',
+      latexSource: 'Performance of $\\alpha$-tuning across datasets.',
+      type: 'figure',
+      sourceFile: 'main.tex',
+      label: 'Figure 1',
+      pdfRegion: { page: 2, bbox: [0.1, 0.1, 0.9, 0.5] },
+    };
+    const { container } = render(<ExcerptPanel excerpts={[figureExcerpt]} pdfUrl="/test.pdf" />);
+    const katexElements = container.querySelectorAll('.katex');
+    expect(katexElements.length).toBeGreaterThan(0);
+  });
+
+  it('does not render disallowed markdown elements in excerpts', () => {
+    const markdownExcerpt: Excerpt = {
+      content: '# Heading\n\nSome text with $x^2$ math.',
+      latexSource: '# Heading\n\nSome text with $x^2$ math.',
+      type: 'text',
+      sourceFile: 'main.tex',
+      label: 'Section 6',
+    };
+    const { container } = render(<ExcerptPanel excerpts={[markdownExcerpt]} />);
+    expect(container.querySelectorAll('h1').length).toBe(0);
+    expect(container.querySelectorAll('.katex').length).toBeGreaterThan(0);
+    expect(screen.getByText(/Heading/)).toBeInTheDocument();
+  });
 });

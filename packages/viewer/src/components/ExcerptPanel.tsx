@@ -54,6 +54,8 @@ export default function ExcerptPanel({ excerpts, pdfUrl, storyMeta }: ExcerptPan
   );
 }
 
+const excerptAllowedElements = ['p', 'span', 'div', 'em', 'strong', 'sub', 'sup', 'br'];
+
 function ExcerptCard({ excerpt, pdfUrl }: { excerpt: Excerpt; pdfUrl?: string }) {
   const [showSource, setShowSource] = useState(false);
 
@@ -82,8 +84,15 @@ function ExcerptCard({ excerpt, pdfUrl }: { excerpt: Excerpt; pdfUrl?: string })
             bbox={excerpt.pdfRegion.bbox}
           />
           {excerpt.content && (
-            <div className="excerpt-content">
-              <p className="excerpt-caption">{excerpt.content}</p>
+            <div className="excerpt-content excerpt-caption">
+              <ReactMarkdown
+                remarkPlugins={[remarkMath]}
+                rehypePlugins={[rehypeKatex]}
+                allowedElements={excerptAllowedElements}
+                unwrapDisallowed={true}
+              >
+                {excerpt.content}
+              </ReactMarkdown>
             </div>
           )}
         </>
@@ -97,6 +106,8 @@ function ExcerptCard({ excerpt, pdfUrl }: { excerpt: Excerpt; pdfUrl?: string })
                 <ReactMarkdown
                   remarkPlugins={[remarkMath]}
                   rehypePlugins={[rehypeKatex]}
+                  allowedElements={excerptAllowedElements}
+                  unwrapDisallowed={true}
                 >
                   {excerpt.content}
                 </ReactMarkdown>
