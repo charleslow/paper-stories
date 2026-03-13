@@ -13,10 +13,21 @@ function localStoriesMiddleware(req: Connect.IncomingMessage, res: ServerRespons
   handleRequest(req, res, next, storiesDir).catch(next)
 }
 
+const MAX_BODY_SIZE = 512 * 1024 // 512KB limit for request bodies
+
 function readBody(req: Connect.IncomingMessage): Promise<string> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = []
-    req.on('data', (chunk: Buffer) => chunks.push(chunk))
+    let size = 0
+    req.on('data', (chunk: Buffer) => {
+      size += chunk.length
+      if (size > MAX_BODY_SIZE) {
+        req.destroy()
+        reject(new Error('Request body too large'))
+        return
+      }
+      chunks.push(chunk)
+    })
     req.on('end', () => resolve(Buffer.concat(chunks).toString()))
     req.on('error', reject)
   })
@@ -104,6 +115,17 @@ function buildChatPrompt(body: {
   return lines.join('\n')
 }
 
+// Only allow safe characters in IDs — no path traversal possible
+const SAFE_ID_RE = /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/
+
+function isSafeId(id: string): boolean {
+  return SAFE_ID_RE.test(id) && !id.includes('..')
+}
+
+// Limit concurrent Claude processes
+let activeChatRequests = 0
+const MAX_CONCURRENT_CHATS = 2
+
 async function readChatFile(chatPath: string, storyId: string) {
   try {
     return JSON.parse(await fs.readFile(chatPath, 'utf-8'))
@@ -122,6 +144,9 @@ async function handleRequest(req: Connect.IncomingMessage, res: ServerResponse, 
   const chatGetMatch = req.url?.match(/^\/_chat\/([^/]+)$/)
   if (chatGetMatch && req.method === 'GET') {
     const storyId = decodeURIComponent(chatGetMatch[1])
+    if (!isSafeId(storyId)) {
+      return jsonResponse(res, { error: 'Invalid story ID' }, 400)
+    }
     const chatPath = path.join(storiesDir, `${storyId}.chat.json`)
     const chatData = await readChatFile(chatPath, storyId)
     return jsonResponse(res, chatData)
@@ -132,15 +157,23 @@ async function handleRequest(req: Connect.IncomingMessage, res: ServerResponse, 
   if (chatPostMatch && req.method === 'POST') {
     const storyId = decodeURIComponent(chatPostMatch[1])
     const chapterId = decodeURIComponent(chatPostMatch[2])
-    const chatPath = path.join(storiesDir, `${storyId}.chat.json`)
-
-    // Security: ensure chat file stays within stories dir
-    if (!chatPath.startsWith(storiesDir)) {
-      return jsonResponse(res, { error: 'Invalid story ID' }, 400)
+    if (!isSafeId(storyId) || !isSafeId(chapterId)) {
+      return jsonResponse(res, { error: 'Invalid story or chapter ID' }, 400)
     }
 
+    if (activeChatRequests >= MAX_CONCURRENT_CHATS) {
+      return jsonResponse(res, { error: 'Too many concurrent chat requests. Please wait.' }, 429)
+    }
+
+    const chatPath = path.join(storiesDir, `${storyId}.chat.json`)
+
+    activeChatRequests++
     try {
       const body = JSON.parse(await readBody(req))
+      if (!body.message || typeof body.message !== 'string' || body.message.length > 10000) {
+        return jsonResponse(res, { error: 'Invalid or too-long message' }, 400)
+      }
+
       const chatData = await readChatFile(chatPath, storyId)
 
       const history = chatData.chapters[chapterId] || []
@@ -166,6 +199,8 @@ async function handleRequest(req: Connect.IncomingMessage, res: ServerResponse, 
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Chat failed'
       return jsonResponse(res, { error: message }, 500)
+    } finally {
+      activeChatRequests--
     }
   }
 
