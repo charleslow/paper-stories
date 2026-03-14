@@ -3,7 +3,7 @@ import { defineConfig, type Connect } from 'vite'
 import react from '@vitejs/plugin-react'
 import path from 'path'
 import fs from 'fs/promises'
-import { execFile } from 'child_process'
+import { spawn } from 'child_process'
 import type { ServerResponse } from 'http'
 import { isSafeId, readBody, buildChatPrompt, withFileLock } from './chat-utils'
 
@@ -21,19 +21,61 @@ function jsonResponse(res: ServerResponse, data: unknown, status = 200) {
 
 function runClaude(prompt: string, storiesDir: string): Promise<string> {
   return new Promise((resolve, reject) => {
-    const proc = execFile('claude', ['-p', prompt, '--allowedTools', 'Read', '--add-dir', storiesDir], {
-      timeout: 120000,
-      maxBuffer: 1024 * 1024,
-    }, (error, stdout, stderr) => {
-      if (error) {
-        console.error('[chat] claude execFile error:', { code: (error as NodeJS.ErrnoException).code, message: error.message, stderr })
-        reject(new Error(stderr || error.message))
-      } else {
-        console.log('[chat] claude responded, length:', stdout.length)
-        resolve(stdout.trim())
-      }
+    let settled = false
+    const done = (err: Error | null, result?: string) => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      if (err) reject(err)
+      else resolve(result!)
+    }
+
+    const proc = spawn('claude', ['-p', '--allowedTools', 'Read', '--add-dir', storiesDir], {
+      stdio: ['pipe', 'pipe', 'pipe'],
     })
     console.log('[chat] claude process pid:', proc.pid)
+
+    const maxBuffer = 1024 * 1024
+    let stdout = ''
+    let stderr = ''
+
+    // Timeout after 120 seconds
+    const timer = setTimeout(() => {
+      proc.kill('SIGTERM')
+      done(new Error('Claude timed out after 120 seconds'))
+    }, 120000)
+
+    proc.stdout.on('data', (data: Buffer) => {
+      stdout += data.toString()
+      if (stdout.length > maxBuffer) {
+        proc.kill('SIGTERM')
+        done(new Error('Claude output exceeded max buffer size'))
+      }
+    })
+
+    proc.stderr.on('data', (data: Buffer) => {
+      if (stderr.length < maxBuffer) stderr += data.toString()
+    })
+
+    proc.on('close', (code) => {
+      if (code === 0) {
+        console.log('[chat] claude responded, length:', stdout.length)
+        done(null, stdout.trim())
+      } else {
+        console.error('[chat] claude spawn error:', { code, stderr })
+        done(new Error(stderr || `Claude exited with code ${code}`))
+      }
+    })
+
+    proc.on('error', (err) => {
+      console.error('[chat] claude spawn error:', err.message)
+      done(new Error(err.message))
+    })
+
+    // Send prompt via stdin (avoids argument length limits and thinking-state hangs)
+    proc.stdin.on('error', () => { /* process died before prompt was fully written; close handler will settle */ })
+    proc.stdin.write(prompt)
+    proc.stdin.end()
   })
 }
 
