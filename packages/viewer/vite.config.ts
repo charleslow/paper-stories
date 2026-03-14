@@ -21,53 +21,61 @@ function jsonResponse(res: ServerResponse, data: unknown, status = 200) {
 
 function runClaude(prompt: string, storiesDir: string): Promise<string> {
   return new Promise((resolve, reject) => {
+    let settled = false
+    const done = (err: Error | null, result?: string) => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      if (err) reject(err)
+      else resolve(result!)
+    }
+
     const proc = spawn('claude', ['-p', '--allowedTools', 'Read', '--add-dir', storiesDir], {
       stdio: ['pipe', 'pipe', 'pipe'],
     })
     console.log('[chat] claude process pid:', proc.pid)
 
+    const maxBuffer = 1024 * 1024
     let stdout = ''
     let stderr = ''
-    const maxBuffer = 1024 * 1024
+
+    // Timeout after 120 seconds
+    const timer = setTimeout(() => {
+      proc.kill('SIGTERM')
+      done(new Error('Claude timed out after 120 seconds'))
+    }, 120000)
 
     proc.stdout.on('data', (data: Buffer) => {
       stdout += data.toString()
       if (stdout.length > maxBuffer) {
         proc.kill('SIGTERM')
-        reject(new Error('Claude output exceeded max buffer size'))
+        done(new Error('Claude output exceeded max buffer size'))
       }
     })
 
     proc.stderr.on('data', (data: Buffer) => {
-      stderr += data.toString()
+      if (stderr.length < maxBuffer) stderr += data.toString()
     })
 
     proc.on('close', (code) => {
-      clearTimeout(timer)
       if (code === 0) {
         console.log('[chat] claude responded, length:', stdout.length)
-        resolve(stdout.trim())
+        done(null, stdout.trim())
       } else {
         console.error('[chat] claude spawn error:', { code, stderr })
-        reject(new Error(stderr || `Claude exited with code ${code}`))
+        done(new Error(stderr || `Claude exited with code ${code}`))
       }
     })
 
     proc.on('error', (err) => {
-      clearTimeout(timer)
       console.error('[chat] claude spawn error:', err.message)
-      reject(new Error(err.message))
+      done(new Error(err.message))
     })
 
     // Send prompt via stdin (avoids argument length limits and thinking-state hangs)
+    proc.stdin.on('error', () => { /* process died before prompt was fully written; close handler will settle */ })
     proc.stdin.write(prompt)
     proc.stdin.end()
-
-    // Timeout after 120 seconds
-    const timer = setTimeout(() => {
-      proc.kill('SIGTERM')
-      reject(new Error('Claude timed out after 120 seconds'))
-    }, 120000)
   })
 }
 
