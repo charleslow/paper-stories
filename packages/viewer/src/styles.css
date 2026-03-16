@@ -48,7 +48,7 @@
    Grayscale Theme (e-ink friendly)
    ============================================================ */
 
-[data-theme="grayscale"] {
+[data-theme="eink"] {
   /* Backgrounds */
   --bg-app: #FFFFFF;
   --bg-primary: #FFFFFF;
@@ -72,10 +72,11 @@
   --border-neutral: rgba(0, 0, 0, 0.15);
   --border-subtle: rgba(0, 0, 0, 0.08);
 
-  /* Semantic → grayscale */
-  --success: #333333;
-  --error: #444444;
-  --error-light: #777777;
+  /* Semantic — keep visually distinct even in grayscale.
+     Success uses a lighter gray; error uses near-black for stronger contrast. */
+  --success: #555555;
+  --error: #111111;
+  --error-light: #444444;
 
   /* Shadows & Glows — minimal for e-ink */
   --accent-glow: none;
@@ -88,10 +89,20 @@
   --radius-secondary: 4px;
 }
 
-/* Disable animations, transitions, and blur for e-ink */
-[data-theme="grayscale"] *,
-[data-theme="grayscale"] *::before,
-[data-theme="grayscale"] *::after {
+/*
+ * Blanket !important overrides for e-ink mode.
+ *
+ * E-ink displays have extremely slow refresh rates (~250ms full, ~120ms partial),
+ * making CSS transitions, animations, and blur effects actively harmful — they
+ * cause ghosting artifacts and make the UI feel sluggish. The universal selector
+ * with !important is intentional: it ensures no component-level specificity can
+ * accidentally re-introduce these effects, which would degrade the e-ink
+ * experience. If you need motion in e-ink mode (unlikely), add an explicit
+ * per-element override rather than weakening this rule.
+ */
+[data-theme="eink"] *,
+[data-theme="eink"] *::before,
+[data-theme="eink"] *::after {
   transition: none !important;
   animation: none !important;
   backdrop-filter: none !important;
@@ -100,7 +111,7 @@
 }
 
 /* Fix gradient title on landing page */
-[data-theme="grayscale"] .landing-title {
+[data-theme="eink"] .landing-title {
   background: none;
   -webkit-background-clip: unset;
   -webkit-text-fill-color: var(--text-primary);
@@ -108,31 +119,31 @@
 }
 
 /* Fix inline code colors */
-[data-theme="grayscale"] .explanation-content code,
-[data-theme="grayscale"] .chat-message-content code,
-[data-theme="grayscale"] .landing-formats code {
+[data-theme="eink"] .explanation-content code,
+[data-theme="eink"] .chat-message-content code,
+[data-theme="eink"] .landing-formats code {
   background: rgba(0, 0, 0, 0.06);
   border-color: rgba(0, 0, 0, 0.12);
   color: var(--text-primary);
 }
 
 /* PDF highlight → grayscale */
-[data-theme="grayscale"] .pdf-region-highlight {
+[data-theme="eink"] .pdf-region-highlight {
   border-color: rgba(0, 0, 0, 0.6);
   background: rgba(0, 0, 0, 0.06);
 }
 
 /* Chat error → grayscale */
-[data-theme="grayscale"] .chat-error {
+[data-theme="eink"] .chat-error {
   background: rgba(0, 0, 0, 0.06);
 }
 
 /* Scrollbar → grayscale */
-[data-theme="grayscale"] ::-webkit-scrollbar-thumb {
+[data-theme="eink"] ::-webkit-scrollbar-thumb {
   background: rgba(0, 0, 0, 0.2);
 }
 
-[data-theme="grayscale"] ::-webkit-scrollbar-thumb:hover {
+[data-theme="eink"] ::-webkit-scrollbar-thumb:hover {
   background: rgba(0, 0, 0, 0.35);
 }
 
@@ -150,6 +161,22 @@
   font-size: 0.75rem;
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
   white-space: nowrap;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.theme-toggle:hover {
+  background: var(--accent-surface);
+  border-color: var(--accent-border);
+  color: var(--text-primary);
+}
+
+.theme-toggle:focus-visible {
+  outline: 2px solid var(--accent-strong);
+  outline-offset: 2px;
+}
+
+.theme-toggle:active {
+  background: var(--accent-border);
 }
 
 * {
@@ -881,6 +908,12 @@ html, body {
   width: 100%;
 }
 
+.landing-theme-toggle {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 12px;
+}
+
 .landing-title {
   font-size: 2.75rem;
   font-weight: 700;
@@ -1060,6 +1093,15 @@ html, body {
   color: var(--accent-strong);
   border-bottom: 2px solid var(--accent-strong);
   background: var(--bg-primary);
+}
+
+.mobile-tabs .theme-toggle {
+  flex: 0 0 auto;
+  border: none;
+  border-left: 1px solid var(--border-neutral);
+  border-radius: 0;
+  font-size: 0.75rem;
+  padding: 10px 12px;
 }
 
 .chapter-panels-mobile {

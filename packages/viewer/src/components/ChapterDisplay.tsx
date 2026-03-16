@@ -1,8 +1,9 @@
 import { useState, useCallback, useEffect } from 'react';
-import { Chapter } from '../types';
+import { Chapter, Theme } from '../types';
 import ExcerptPanel from './ExcerptPanel';
 import ExplanationPanel from './ExplanationPanel';
 import ChatPanel from './ChatPanel';
+import ThemeToggle from './ThemeToggle';
 
 interface ChapterDisplayProps {
   chapter: Chapter;
@@ -19,6 +20,8 @@ interface ChapterDisplayProps {
     arxivUrl: string;
     query: string | null;
   };
+  theme: Theme;
+  onToggleTheme: () => void;
 }
 
 export default function ChapterDisplay({
@@ -31,6 +34,8 @@ export default function ChapterDisplay({
   chatAvailable,
   storyId,
   storyMeta,
+  theme,
+  onToggleTheme,
 }: ChapterDisplayProps) {
   const [splitPercent, setSplitPercent] = useState(40);
   const [isDragging, setIsDragging] = useState(false);
@@ -96,7 +101,7 @@ export default function ChapterDisplay({
         </div>
       </header>
 
-      {/* Mobile tabs */}
+      {/* Mobile tabs — includes theme toggle since sidebar is hidden at this breakpoint */}
       {isMobile && (
         <div className="mobile-tabs">
           <button
@@ -119,6 +124,7 @@ export default function ChapterDisplay({
               Chat
             </button>
           )}
+          <ThemeToggle theme={theme} onToggle={onToggleTheme} />
         </div>
       )}
 
