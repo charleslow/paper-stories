@@ -44,6 +44,114 @@
   --radius-secondary: 8px;
 }
 
+/* ============================================================
+   Grayscale Theme (e-ink friendly)
+   ============================================================ */
+
+[data-theme="grayscale"] {
+  /* Backgrounds */
+  --bg-app: #FFFFFF;
+  --bg-primary: #FFFFFF;
+  --bg-secondary: #F5F5F5;
+  --bg-elevated: #EBEBEB;
+  --bg-glass: rgba(255, 255, 255, 0.95);
+
+  /* Accent → grayscale */
+  --accent-strong: #222222;
+  --accent-muted: #555555;
+  --accent-dark: #000000;
+  --accent-surface: rgba(0, 0, 0, 0.05);
+  --accent-border: rgba(0, 0, 0, 0.3);
+
+  /* Text */
+  --text-primary: #111111;
+  --text-secondary: #333333;
+  --text-muted: #777777;
+
+  /* Borders */
+  --border-neutral: rgba(0, 0, 0, 0.15);
+  --border-subtle: rgba(0, 0, 0, 0.08);
+
+  /* Semantic → grayscale */
+  --success: #333333;
+  --error: #444444;
+  --error-light: #777777;
+
+  /* Shadows & Glows — minimal for e-ink */
+  --accent-glow: none;
+  --shadow-elevated: 0 1px 3px rgba(0, 0, 0, 0.12);
+  --shadow-glass: 0 1px 2px rgba(0, 0, 0, 0.08);
+
+  /* Layout (same) */
+  --sidebar-width: 240px;
+  --radius-primary: 6px;
+  --radius-secondary: 4px;
+}
+
+/* Disable animations, transitions, and blur for e-ink */
+[data-theme="grayscale"] *,
+[data-theme="grayscale"] *::before,
+[data-theme="grayscale"] *::after {
+  transition: none !important;
+  animation: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  text-shadow: none !important;
+}
+
+/* Fix gradient title on landing page */
+[data-theme="grayscale"] .landing-title {
+  background: none;
+  -webkit-background-clip: unset;
+  -webkit-text-fill-color: var(--text-primary);
+  background-clip: unset;
+}
+
+/* Fix inline code colors */
+[data-theme="grayscale"] .explanation-content code,
+[data-theme="grayscale"] .chat-message-content code,
+[data-theme="grayscale"] .landing-formats code {
+  background: rgba(0, 0, 0, 0.06);
+  border-color: rgba(0, 0, 0, 0.12);
+  color: var(--text-primary);
+}
+
+/* PDF highlight → grayscale */
+[data-theme="grayscale"] .pdf-region-highlight {
+  border-color: rgba(0, 0, 0, 0.6);
+  background: rgba(0, 0, 0, 0.06);
+}
+
+/* Chat error → grayscale */
+[data-theme="grayscale"] .chat-error {
+  background: rgba(0, 0, 0, 0.06);
+}
+
+/* Scrollbar → grayscale */
+[data-theme="grayscale"] ::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.2);
+}
+
+[data-theme="grayscale"] ::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.35);
+}
+
+/* ============================================================
+   Theme Toggle
+   ============================================================ */
+
+.theme-toggle {
+  padding: 6px 12px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-neutral);
+  color: var(--text-secondary);
+  border-radius: var(--radius-secondary);
+  cursor: pointer;
+  font-size: 0.75rem;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  white-space: nowrap;
+}
+
 * {
   margin: 0;
   padding: 0;
@@ -169,6 +277,10 @@ html, body {
 .sidebar-footer {
   padding: 1rem 1.5rem;
   border-top: 1px solid var(--border-neutral);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
 }
 
 .back-link {

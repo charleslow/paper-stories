@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { fetchLocalStories, type LocalStory } from '../api';
+import ThemeToggle from './ThemeToggle';
 
 interface RecentStory {
   url: string;
@@ -8,7 +9,7 @@ interface RecentStory {
   accessedAt: string;
 }
 
-export default function LandingPage() {
+export default function LandingPage({ theme, onToggleTheme }: { theme: string; onToggleTheme: () => void }) {
   const [input, setInput] = useState('');
   const [recent, setRecent] = useState<RecentStory[]>([]);
   const [localStories, setLocalStories] = useState<LocalStory[]>([]);
@@ -48,6 +49,9 @@ export default function LandingPage() {
   return (
     <div className="landing-page">
       <div className="landing-container">
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
+          <ThemeToggle theme={theme} onToggle={onToggleTheme} />
+        </div>
         <h1 className="landing-title">📄 Paper Stories</h1>
         <p className="landing-subtitle">
           Interactive deep-dives into ML research papers

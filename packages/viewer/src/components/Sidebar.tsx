@@ -1,4 +1,5 @@
 import { Chapter } from '../types';
+import ThemeToggle from './ThemeToggle';
 
 interface SidebarProps {
   chapters: Chapter[];
@@ -6,9 +7,11 @@ interface SidebarProps {
   onSelect: (index: number) => void;
   title: string;
   arxivUrl: string;
+  theme: string;
+  onToggleTheme: () => void;
 }
 
-export default function Sidebar({ chapters, currentChapter, onSelect, title, arxivUrl }: SidebarProps) {
+export default function Sidebar({ chapters, currentChapter, onSelect, title, arxivUrl, theme, onToggleTheme }: SidebarProps) {
   return (
     <aside className="sidebar">
       <div className="sidebar-header">
@@ -33,6 +36,7 @@ export default function Sidebar({ chapters, currentChapter, onSelect, title, arx
       </nav>
       <div className="sidebar-footer">
         <a href="?" className="back-link">← All Stories</a>
+        <ThemeToggle theme={theme} onToggle={onToggleTheme} />
       </div>
     </aside>
   );
