@@ -3,11 +3,12 @@
 /**
  * Paper Stories CLI
  *
- * Generates interactive paper walkthrough stories from arXiv papers.
+ * Generates interactive walkthrough stories from arXiv papers or local PDFs (textbooks, etc.).
  *
  * Usage:
  *   paper-stories generate <arxiv-url> [--query "..."] [--output-dir ./out]
  *   paper-stories generate 2401.12345 --query "attention mechanism"
+ *   paper-stories generate --local --pdf ./ch4.pdf [--latex-dir ./ch4/] --title "Chapter 4"
  */
 
 import { Command } from 'commander';
@@ -18,6 +19,7 @@ import { fileURLToPath } from 'url';
 import { v4 as uuidv4 } from 'uuid';
 import ora from 'ora';
 import { parseArxivId, downloadLatexSource, downloadPdf } from './arxiv.js';
+import { prepareLocalSource, prepareLocalPdf } from './local.js';
 import { buildPrompt } from './prompt.js';
 import { validateStory } from './validate.js';
 
@@ -28,20 +30,33 @@ const program = new Command();
 
 program
   .name('paper-stories')
-  .description('Generate interactive walkthrough stories from arXiv papers')
-  .version('0.1.0');
+  .description('Generate interactive walkthrough stories from arXiv papers or local PDFs')
+  .version('0.2.0');
 
 program
   .command('generate')
-  .description('Generate a story from an arXiv paper')
-  .argument('<arxiv>', 'arXiv URL or paper ID (e.g., 2401.12345)')
+  .description('Generate a story from an arXiv paper or local PDF')
+  .argument('[arxiv]', 'arXiv URL or paper ID (e.g., 2401.12345). Omit when using --local.')
   .option('-q, --query <query>', 'Optional focus query for the story')
   .option('-o, --output-dir <dir>', 'Output directory', '.')
   .option('-c, --cache-repo <path>', 'Path to code-stories-cache repo for direct publishing')
   .option('-s, --slug <slug>', 'Story slug for the output filename')
+  .option('--local', 'Use local PDF instead of arXiv')
+  .option('--pdf <path>', 'Path to local PDF file (required with --local)')
+  .option('--latex-dir <path>', 'Path to local LaTeX source directory (optional with --local)')
+  .option('--title <title>', 'Title for the story (used with --local)')
+  .option('--textbook', 'Use textbook mode — slower pace, more chapters, insightful questions')
   .action(async (arxiv, options) => {
     try {
-      await generateStory(arxiv, options);
+      if (options.local) {
+        await generateLocalStory(options);
+      } else {
+        if (!arxiv) {
+          console.error('✗ Error: arXiv URL or ID is required (or use --local --pdf <path>)');
+          process.exit(1);
+        }
+        await generateStory(arxiv, options);
+      }
     } catch (err) {
       console.error(`\n✗ Error: ${err.message}`);
       process.exit(1);
@@ -50,13 +65,90 @@ program
 
 program.parse();
 
+/**
+ * Generate a story from a local PDF (textbook chapter, etc.)
+ */
+async function generateLocalStory(options) {
+  if (!options.pdf) {
+    throw new Error('--pdf <path> is required when using --local mode');
+  }
+
+  const generationId = uuidv4();
+  const title = options.title || 'Local Document';
+  const isTextbook = !!options.textbook;
+
+  console.log(`\n📄 Paper Stories Generator (local mode${isTextbook ? ' — textbook' : ''})`);
+  console.log(`   PDF: ${resolve(options.pdf)}`);
+  console.log(`   LaTeX: ${options.latexDir ? resolve(options.latexDir) : '(none)'}`);
+  console.log(`   Title: ${title}`);
+  console.log(`   Query: ${options.query || '(comprehensive deep-dive)'}`);
+  console.log(`   Generation ID: ${generationId}\n`);
+
+  // Create working directory
+  const workDir = join(resolve(options.outputDir), '.paper-stories-tmp', generationId);
+  const generationDir = join(workDir, 'generation');
+  mkdirSync(generationDir, { recursive: true });
+
+  // Prepare local sources
+  console.log('📂 Preparing local sources...');
+  const sourceResult = options.latexDir
+    ? prepareLocalSource(options.latexDir)
+    : { sourceDir: null, hasSource: false, texFiles: [], allFiles: [] };
+  const pdfPath = prepareLocalPdf(options.pdf, workDir);
+
+  // Extract PDF text regions
+  let regionsPath = null;
+  if (pdfPath) {
+    console.log('📐 Extracting PDF text regions...');
+    regionsPath = join(workDir, 'regions.json');
+    const extractScript = join(__dirname, 'extract_regions.py');
+    try {
+      execFileSync('uv', ['run', extractScript, pdfPath, '-o', regionsPath], {
+        stdio: ['pipe', 'pipe', 'pipe'],
+      });
+      const regions = JSON.parse(readFileSync(regionsPath, 'utf8'));
+      const blockCount = regions.pages.reduce((sum, p) => sum + p.blocks.length, 0);
+      console.log(`   ✓ Extracted ${blockCount} text blocks from ${regions.totalPages} pages`);
+    } catch (err) {
+      console.warn(`   ⚠ Region extraction failed (story will proceed without bboxes): ${err.message}`);
+      regionsPath = null;
+    }
+  }
+
+  // Build the prompt
+  const prompt = buildPrompt({
+    arxivId: null,
+    arxivUrl: null,
+    query: options.query,
+    sourceDir: sourceResult.hasSource ? sourceResult.sourceDir : null,
+    pdfPath,
+    regionsPath,
+    generationDir,
+    title,
+    isTextbook,
+  });
+
+  // Run the shared generation pipeline
+  await runGenerationPipeline({
+    prompt,
+    generationDir,
+    workDir,
+    sourceResult,
+    pdfPath,
+    options,
+  });
+}
+
+/**
+ * Generate a story from an arXiv paper (existing flow).
+ */
 async function generateStory(arxivInput, options) {
-  // Parse arXiv ID
   const arxivId = parseArxivId(arxivInput);
   const arxivUrl = `https://arxiv.org/abs/${arxivId}`;
   const generationId = uuidv4();
+  const isTextbook = !!options.textbook;
 
-  console.log(`\n📄 Paper Stories Generator`);
+  console.log(`\n📄 Paper Stories Generator${isTextbook ? ' (textbook mode)' : ''}`);
   console.log(`   Paper: ${arxivUrl}`);
   console.log(`   Query: ${options.query || '(comprehensive deep-dive)'}`);
   console.log(`   Generation ID: ${generationId}\n`);
@@ -77,7 +169,7 @@ async function generateStory(arxivInput, options) {
     throw new Error('Could not download either LaTeX source or PDF. Check the arXiv ID.');
   }
 
-  // Extract PDF text regions with bounding boxes
+  // Extract PDF text regions
   let regionsPath = null;
   if (pdfPath) {
     console.log('📐 Extracting PDF text regions...');
@@ -105,8 +197,25 @@ async function generateStory(arxivInput, options) {
     pdfPath,
     regionsPath,
     generationDir,
+    title: null,
+    isTextbook,
   });
 
+  // Run the shared generation pipeline
+  await runGenerationPipeline({
+    prompt,
+    generationDir,
+    workDir,
+    sourceResult,
+    pdfPath,
+    options,
+  });
+}
+
+/**
+ * Shared generation pipeline: prompt → Claude → validate → save.
+ */
+async function runGenerationPipeline({ prompt, generationDir, workDir, sourceResult, pdfPath, options }) {
   // Write prompt for debugging
   writeFileSync(join(generationDir, '_prompt.md'), prompt);
 
@@ -114,7 +223,7 @@ async function generateStory(arxivInput, options) {
   console.log('\n🤖 Launching Claude for story generation...\n');
 
   const spinner = ora({
-    text: 'Stage 1: Exploring paper sources...',
+    text: 'Stage 1: Exploring sources...',
     color: 'cyan',
   }).start();
 
@@ -125,16 +234,14 @@ async function generateStory(arxivInput, options) {
     { marker: 'EXCERPTS_COMPLETE', label: 'Stage 4: Verifying excerpts against source...' },
     { marker: 'VERIFICATION_COMPLETE', label: 'Stage 5: Writing explanations...' },
     { marker: 'EXPLANATIONS_COMPLETE', label: 'Stage 6: Assembling final story...' },
-    { marker: 'DONE', label: null }, // Final marker
+    { marker: 'DONE', label: null },
   ];
 
   let currentStage = 0;
 
-  // Poll for progress
   const progressInterval = setInterval(() => {
     while (currentStage < stages.length) {
       const { marker, label } = stages[currentStage];
-      // Check for marker as a file or in checkpoint files
       const doneFile = join(generationDir, 'DONE');
       const checkFiles = [
         join(generationDir, 'exploration.md'),
@@ -180,8 +287,15 @@ async function generateStory(arxivInput, options) {
       dirs.push('--add-dir', workDir);
     }
 
+    // Strip CLAUDECODE env vars so nested claude sessions don't fail
+    const cleanEnv = { ...process.env };
+    delete cleanEnv.CLAUDECODE;
+    delete cleanEnv.CLAUDE_CODE_ENTRYPOINT;
+    delete cleanEnv.CLAUDE_CODE_SESSION;
+
     const proc = spawn('claude', ['-p', '--allowedTools', allowedTools, ...dirs], {
       stdio: ['pipe', 'pipe', 'pipe'],
+      env: cleanEnv,
     });
 
     let stdout = '';
@@ -202,11 +316,9 @@ async function generateStory(arxivInput, options) {
       rejectPromise(new Error(`Failed to spawn Claude: ${err.message}`));
     });
 
-    // Send prompt via stdin
     proc.stdin.write(prompt);
     proc.stdin.end();
 
-    // Cleanup on signals
     const cleanup = () => {
       proc.kill('SIGTERM');
       process.exit(1);
@@ -242,12 +354,10 @@ async function generateStory(arxivInput, options) {
     const slug = options.slug || slugify(story.title);
     await publishToCache(story, slug, options.cacheRepo, pdfPath);
   } else {
-    // Copy to output directory
     const slug = options.slug || slugify(story.title);
     const outputPath = join(resolve(options.outputDir), `${slug}.json`);
     story.id = slug;
     writeFileSync(outputPath, JSON.stringify(story, null, 2));
-    // Copy PDF alongside the story JSON
     if (pdfPath && existsSync(pdfPath)) {
       const pdfOutputPath = join(resolve(options.outputDir), `${slug}.pdf`);
       copyFileSync(pdfPath, pdfOutputPath);
@@ -256,7 +366,6 @@ async function generateStory(arxivInput, options) {
     console.log(`\n✓ Story saved to: ${outputPath}`);
   }
 
-  // Cleanup
   console.log(`\n📁 Generation files kept at: ${generationDir}`);
 }
 
@@ -266,35 +375,29 @@ async function publishToCache(story, slug, cacheRepoPath, pdfPath) {
     throw new Error(`Cache repo stories directory not found: ${storiesDir}`);
   }
 
-  // Update story ID to slug
   story.id = slug;
 
-  // Write story file
   const storyPath = join(storiesDir, `${slug}.json`);
   writeFileSync(storyPath, JSON.stringify(story, null, 2));
 
-  // Copy PDF alongside the story JSON
   if (pdfPath && existsSync(pdfPath)) {
     const pdfOutputPath = join(storiesDir, `${slug}.pdf`);
     copyFileSync(pdfPath, pdfOutputPath);
     console.log(`✓ PDF published to: ${pdfOutputPath}`);
   }
 
-  // Update manifest
   const manifestPath = join(storiesDir, 'manifest.json');
   let manifest = { stories: [] };
   if (existsSync(manifestPath)) {
     manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
   }
 
-  // Remove existing entry with same slug
   manifest.stories = manifest.stories.filter(s => s.id !== slug);
 
-  // Add new entry at the beginning
   manifest.stories.unshift({
     id: slug,
     title: story.title,
-    arxivId: story.arxivId,
+    arxivId: story.arxivId || null,
     createdAt: story.createdAt,
   });
 

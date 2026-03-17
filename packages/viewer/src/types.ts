@@ -22,8 +22,8 @@ export interface Chapter {
 export interface Story {
   id: string;
   title: string;
-  arxivId: string;
-  arxivUrl: string;
+  arxivId: string | null;
+  arxivUrl: string | null;
   query: string | null;
   createdAt: string;
   chapters: Chapter[];
