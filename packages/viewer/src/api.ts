@@ -102,9 +102,9 @@ export async function checkChatAvailable(): Promise<boolean> {
   }
 }
 
-export async function fetchChatHistory(storyId: string): Promise<StoryChat> {
+export async function fetchChatHistory(storyId: string, signal?: AbortSignal): Promise<StoryChat> {
   try {
-    const res = await fetch(`/local-stories/_chat/${encodeURIComponent(storyId)}`);
+    const res = await fetch(`/local-stories/_chat/${encodeURIComponent(storyId)}`, { signal });
     if (!res.ok) return { storyId, chapters: {} };
     return await res.json();
   } catch {

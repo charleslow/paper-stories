@@ -19,29 +19,52 @@ export default function ChatPanel({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [historyLoaded, setHistoryLoaded] = useState<string | null>(null);
+  const [chatInView, setChatInView] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const chatPanelRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const abortRef = useRef<AbortController | null>(null);
+  const prevMessagesLenRef = useRef(0);
+
+  // Track whether chat panel is in the viewport
+  useEffect(() => {
+    const el = chatPanelRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => setChatInView(entry.isIntersecting),
+      { threshold: 0.1 },
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
 
   // Load chat history when chapter changes
   useEffect(() => {
     const key = `${storyId}:${chapterId}`;
     if (historyLoaded === key) return;
 
-    let cancelled = false;
-    setMessages([]);
-    fetchChatHistory(storyId).then(chatData => {
-      if (!cancelled) {
+    // Abort any in-flight request
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+
+    // Keep previous messages visible until new data arrives (avoids flash of empty state)
+    fetchChatHistory(storyId, controller.signal).then(chatData => {
+      if (!controller.signal.aborted) {
         setMessages(chatData.chapters[chapterId] || []);
         setHistoryLoaded(key);
       }
     });
-    return () => { cancelled = true; };
+    return () => { controller.abort(); };
   }, [storyId, chapterId, historyLoaded]);
 
-  // Auto-scroll to bottom on new messages
+  // Auto-scroll only when chat area is visible and messages were added (not on initial load / chapter switch)
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+    if (messages.length > prevMessagesLenRef.current && chatInView) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+    prevMessagesLenRef.current = messages.length;
+  }, [messages, chatInView]);
 
   const handleSend = useCallback(async () => {
     const trimmed = input.trim();
@@ -81,7 +104,7 @@ export default function ChatPanel({
   };
 
   return (
-    <div className="chat-panel">
+    <div className="chat-panel" ref={chatPanelRef}>
       <div className="chat-header">
         <span className="chat-header-title">Ask about this chapter</span>
       </div>
@@ -114,25 +137,27 @@ export default function ChatPanel({
         <div ref={messagesEndRef} />
       </div>
 
-      <div className="chat-input-bar">
-        <textarea
-          ref={inputRef}
-          className="chat-input"
-          value={input}
-          onChange={e => setInput(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder="Ask a question..."
-          rows={1}
-          disabled={loading}
-        />
-        <button
-          className="chat-send-btn"
-          onClick={handleSend}
-          disabled={loading || !input.trim()}
-        >
-          Send
-        </button>
-      </div>
+      {chatInView && (
+        <div className="chat-input-bar">
+          <textarea
+            ref={inputRef}
+            className="chat-input"
+            value={input}
+            onChange={e => setInput(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder="Ask a question..."
+            rows={1}
+            disabled={loading}
+          />
+          <button
+            className="chat-send-btn"
+            onClick={handleSend}
+            disabled={loading || !input.trim()}
+          >
+            Send
+          </button>
+        </div>
+      )}
     </div>
   );
 }
