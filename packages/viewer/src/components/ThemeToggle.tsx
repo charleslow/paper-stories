@@ -1,7 +1,9 @@
-export default function ThemeToggle({ theme, onToggle }: { theme: string; onToggle: () => void }) {
+import { Theme } from '../types';
+
+export default function ThemeToggle({ theme, onToggle }: { theme: Theme; onToggle: () => void }) {
   return (
     <button className="theme-toggle" onClick={onToggle}>
-      {theme === 'grayscale' ? 'Color mode' : 'E-ink mode'}
+      {theme === 'eink' ? 'Color mode' : 'E-ink mode'}
     </button>
   );
 }

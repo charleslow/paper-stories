@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Story } from './types';
+import { Story, Theme } from './types';
 import { parseStoryUrl, fetchStory, resolvePdfUrl, checkChatAvailable } from './api';
 import Sidebar from './components/Sidebar';
 import ChapterDisplay from './components/ChapterDisplay';
@@ -13,23 +13,23 @@ type AppState =
   | { status: 'ready'; story: Story; currentChapter: number; pdfUrl: string | null; chatAvailable: boolean };
 
 function useTheme() {
-  const [theme, setTheme] = useState(() =>
-    typeof localStorage !== 'undefined'
-      ? localStorage.getItem('paper-stories-theme') || 'dark'
-      : 'dark'
-  );
+  const [theme, setTheme] = useState<Theme>(() => {
+    if (typeof localStorage === 'undefined') return 'dark';
+    const stored = localStorage.getItem('paper-stories-theme');
+    return stored === 'eink' || stored === 'grayscale' ? 'eink' : 'dark';
+  });
 
   useEffect(() => {
     if (theme === 'dark') {
       document.documentElement.removeAttribute('data-theme');
     } else {
-      document.documentElement.setAttribute('data-theme', theme);
+      document.documentElement.setAttribute('data-theme', 'eink');
     }
     try { localStorage.setItem('paper-stories-theme', theme); } catch {}
   }, [theme]);
 
   const toggle = useCallback(() => {
-    setTheme(t => t === 'dark' ? 'grayscale' : 'dark');
+    setTheme(t => t === 'dark' ? 'eink' : 'dark');
   }, []);
 
   return { theme, toggle };
@@ -148,6 +148,8 @@ export default function App() {
           arxivUrl: story.arxivUrl,
           query: story.query,
         }}
+        theme={theme}
+        onToggleTheme={toggleTheme}
       />
     </div>
   );

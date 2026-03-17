@@ -1,4 +1,4 @@
-import { Chapter } from '../types';
+import { Chapter, Theme } from '../types';
 import ThemeToggle from './ThemeToggle';
 
 interface SidebarProps {
@@ -7,7 +7,7 @@ interface SidebarProps {
   onSelect: (index: number) => void;
   title: string;
   arxivUrl: string;
-  theme: string;
+  theme: Theme;
   onToggleTheme: () => void;
 }
 
