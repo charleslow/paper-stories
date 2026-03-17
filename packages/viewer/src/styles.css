@@ -44,6 +44,141 @@
   --radius-secondary: 8px;
 }
 
+/* ============================================================
+   Grayscale Theme (e-ink friendly)
+   ============================================================ */
+
+[data-theme="eink"] {
+  /* Backgrounds */
+  --bg-app: #FFFFFF;
+  --bg-primary: #FFFFFF;
+  --bg-secondary: #F5F5F5;
+  --bg-elevated: #EBEBEB;
+  --bg-glass: rgba(255, 255, 255, 0.95);
+
+  /* Accent → grayscale */
+  --accent-strong: #222222;
+  --accent-muted: #555555;
+  --accent-dark: #000000;
+  --accent-surface: rgba(0, 0, 0, 0.05);
+  --accent-border: rgba(0, 0, 0, 0.3);
+
+  /* Text */
+  --text-primary: #111111;
+  --text-secondary: #333333;
+  --text-muted: #777777;
+
+  /* Borders */
+  --border-neutral: rgba(0, 0, 0, 0.15);
+  --border-subtle: rgba(0, 0, 0, 0.08);
+
+  /* Semantic — keep visually distinct even in grayscale.
+     Success uses a lighter gray; error uses near-black for stronger contrast. */
+  --success: #555555;
+  --error: #111111;
+  --error-light: #444444;
+
+  /* Shadows & Glows — minimal for e-ink */
+  --accent-glow: none;
+  --shadow-elevated: 0 1px 3px rgba(0, 0, 0, 0.12);
+  --shadow-glass: 0 1px 2px rgba(0, 0, 0, 0.08);
+
+  /* Layout (same) */
+  --sidebar-width: 240px;
+  --radius-primary: 6px;
+  --radius-secondary: 4px;
+}
+
+/*
+ * Blanket !important overrides for e-ink mode.
+ *
+ * E-ink displays have extremely slow refresh rates (~250ms full, ~120ms partial),
+ * making CSS transitions, animations, and blur effects actively harmful — they
+ * cause ghosting artifacts and make the UI feel sluggish. The universal selector
+ * with !important is intentional: it ensures no component-level specificity can
+ * accidentally re-introduce these effects, which would degrade the e-ink
+ * experience. If you need motion in e-ink mode (unlikely), add an explicit
+ * per-element override rather than weakening this rule.
+ */
+[data-theme="eink"] *,
+[data-theme="eink"] *::before,
+[data-theme="eink"] *::after {
+  transition: none !important;
+  animation: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  text-shadow: none !important;
+}
+
+/* Fix gradient title on landing page */
+[data-theme="eink"] .landing-title {
+  background: none;
+  -webkit-background-clip: unset;
+  -webkit-text-fill-color: var(--text-primary);
+  background-clip: unset;
+}
+
+/* Fix inline code colors */
+[data-theme="eink"] .explanation-content code,
+[data-theme="eink"] .chat-message-content code,
+[data-theme="eink"] .landing-formats code {
+  background: rgba(0, 0, 0, 0.06);
+  border-color: rgba(0, 0, 0, 0.12);
+  color: var(--text-primary);
+}
+
+/* PDF highlight → grayscale */
+[data-theme="eink"] .pdf-region-highlight {
+  border-color: rgba(0, 0, 0, 0.6);
+  background: rgba(0, 0, 0, 0.06);
+}
+
+/* Chat error → grayscale */
+[data-theme="eink"] .chat-error {
+  background: rgba(0, 0, 0, 0.06);
+}
+
+/* Scrollbar → grayscale */
+[data-theme="eink"] ::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.2);
+}
+
+[data-theme="eink"] ::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.35);
+}
+
+/* ============================================================
+   Theme Toggle
+   ============================================================ */
+
+.theme-toggle {
+  padding: 6px 12px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-neutral);
+  color: var(--text-secondary);
+  border-radius: var(--radius-secondary);
+  cursor: pointer;
+  font-size: 0.75rem;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  white-space: nowrap;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.theme-toggle:hover {
+  background: var(--accent-surface);
+  border-color: var(--accent-border);
+  color: var(--text-primary);
+}
+
+.theme-toggle:focus-visible {
+  outline: 2px solid var(--accent-strong);
+  outline-offset: 2px;
+}
+
+.theme-toggle:active {
+  background: var(--accent-border);
+}
+
 * {
   margin: 0;
   padding: 0;
@@ -169,6 +304,10 @@ html, body {
 .sidebar-footer {
   padding: 1rem 1.5rem;
   border-top: 1px solid var(--border-neutral);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
 }
 
 .back-link {
@@ -769,6 +908,12 @@ html, body {
   width: 100%;
 }
 
+.landing-theme-toggle {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 12px;
+}
+
 .landing-title {
   font-size: 2.75rem;
   font-weight: 700;
@@ -948,6 +1093,15 @@ html, body {
   color: var(--accent-strong);
   border-bottom: 2px solid var(--accent-strong);
   background: var(--bg-primary);
+}
+
+.mobile-tabs .theme-toggle {
+  flex: 0 0 auto;
+  border: none;
+  border-left: 1px solid var(--border-neutral);
+  border-radius: 0;
+  font-size: 0.75rem;
+  padding: 10px 12px;
 }
 
 .chapter-panels-mobile {

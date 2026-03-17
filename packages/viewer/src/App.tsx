@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Story } from './types';
+import { Story, Theme } from './types';
 import { parseStoryUrl, fetchStory, resolvePdfUrl, checkChatAvailable } from './api';
 import Sidebar from './components/Sidebar';
 import ChapterDisplay from './components/ChapterDisplay';
 import LandingPage from './components/LandingPage';
+import ThemeToggle from './components/ThemeToggle';
 
 type AppState =
   | { status: 'landing' }
@@ -11,8 +12,32 @@ type AppState =
   | { status: 'error'; message: string }
   | { status: 'ready'; story: Story; currentChapter: number; pdfUrl: string | null; chatAvailable: boolean };
 
+function useTheme() {
+  const [theme, setTheme] = useState<Theme>(() => {
+    if (typeof localStorage === 'undefined') return 'dark';
+    const stored = localStorage.getItem('paper-stories-theme');
+    return stored === 'eink' || stored === 'grayscale' ? 'eink' : 'dark';
+  });
+
+  useEffect(() => {
+    if (theme === 'dark') {
+      document.documentElement.removeAttribute('data-theme');
+    } else {
+      document.documentElement.setAttribute('data-theme', 'eink');
+    }
+    try { localStorage.setItem('paper-stories-theme', theme); } catch {}
+  }, [theme]);
+
+  const toggle = useCallback(() => {
+    setTheme(t => t === 'dark' ? 'eink' : 'dark');
+  }, []);
+
+  return { theme, toggle };
+}
+
 export default function App() {
   const [state, setState] = useState<AppState>({ status: 'landing' });
+  const { theme, toggle: toggleTheme } = useTheme();
 
   useEffect(() => {
     const { storyUrl } = parseStoryUrl();
@@ -72,7 +97,7 @@ export default function App() {
   }, [state, navigateChapter]);
 
   if (state.status === 'landing') {
-    return <LandingPage />;
+    return <LandingPage theme={theme} onToggleTheme={toggleTheme} />;
   }
 
   if (state.status === 'loading') {
@@ -105,6 +130,8 @@ export default function App() {
         onSelect={navigateChapter}
         title={story.title}
         arxivUrl={story.arxivUrl}
+        theme={theme}
+        onToggleTheme={toggleTheme}
       />
       <ChapterDisplay
         chapter={chapter}
@@ -121,6 +148,8 @@ export default function App() {
           arxivUrl: story.arxivUrl,
           query: story.query,
         }}
+        theme={theme}
+        onToggleTheme={toggleTheme}
       />
     </div>
   );

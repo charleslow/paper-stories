@@ -39,3 +39,5 @@ export interface StoryChat {
   storyId: string;
   chapters: Record<string, ChatMessage[]>;
 }
+
+export type Theme = 'dark' | 'eink';
