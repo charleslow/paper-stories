@@ -18,46 +18,53 @@ export default function ChatPanel({
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [expanded, setExpanded] = useState(false);
   const [historyLoaded, setHistoryLoaded] = useState<string | null>(null);
+  const [chatInView, setChatInView] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const chatPanelRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const abortRef = useRef<AbortController | null>(null);
+  const prevMessagesLenRef = useRef(0);
 
-  // Reset messages when chapter changes while collapsed
+  // Track whether chat panel is in the viewport
   useEffect(() => {
-    if (!expanded) {
-      setMessages([]);
-      setHistoryLoaded(null);
-    }
-  }, [chapterId, expanded]);
+    const el = chatPanelRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => setChatInView(entry.isIntersecting),
+      { threshold: 0.1 },
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
 
-  // Load chat history only when expanded AND history not yet loaded for this chapter
+  // Load chat history when chapter changes
   useEffect(() => {
-    if (!expanded) return;
     const key = `${storyId}:${chapterId}`;
     if (historyLoaded === key) return;
 
-    let cancelled = false;
-    fetchChatHistory(storyId).then(chatData => {
-      if (!cancelled) {
+    // Abort any in-flight request
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+
+    // Keep previous messages visible until new data arrives (avoids flash of empty state)
+    fetchChatHistory(storyId, controller.signal).then(chatData => {
+      if (!controller.signal.aborted) {
         setMessages(chatData.chapters[chapterId] || []);
         setHistoryLoaded(key);
       }
     });
-    return () => { cancelled = true; };
-  }, [storyId, chapterId, expanded, historyLoaded]);
+    return () => { controller.abort(); };
+  }, [storyId, chapterId, historyLoaded]);
 
-  // Auto-scroll to bottom on new messages
+  // Auto-scroll only when chat area is visible and messages were added (not on initial load / chapter switch)
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
-
-  // Focus input when expanded
-  useEffect(() => {
-    if (expanded) {
-      inputRef.current?.focus();
+    if (messages.length > prevMessagesLenRef.current && chatInView) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
-  }, [expanded]);
+    prevMessagesLenRef.current = messages.length;
+  }, [messages, chatInView]);
 
   const handleSend = useCallback(async () => {
     const trimmed = input.trim();
@@ -96,25 +103,10 @@ export default function ChatPanel({
     }
   };
 
-  if (!expanded) {
-    return (
-      <button className="chat-collapsed-bar" onClick={() => setExpanded(true)}>
-        <span className="chat-collapsed-icon">?</span>
-        Ask about this chapter
-        {messages.length > 0 && (
-          <span className="chat-message-count">{messages.length}</span>
-        )}
-      </button>
-    );
-  }
-
   return (
-    <div className="chat-panel">
+    <div className="chat-panel" ref={chatPanelRef}>
       <div className="chat-header">
         <span className="chat-header-title">Ask about this chapter</span>
-        <button className="chat-collapse-btn" onClick={() => setExpanded(false)}>
-          Collapse
-        </button>
       </div>
 
       <div className="chat-messages">
@@ -145,25 +137,27 @@ export default function ChatPanel({
         <div ref={messagesEndRef} />
       </div>
 
-      <div className="chat-input-bar">
-        <textarea
-          ref={inputRef}
-          className="chat-input"
-          value={input}
-          onChange={e => setInput(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder="Ask a question..."
-          rows={1}
-          disabled={loading}
-        />
-        <button
-          className="chat-send-btn"
-          onClick={handleSend}
-          disabled={loading || !input.trim()}
-        >
-          Send
-        </button>
-      </div>
+      {chatInView && (
+        <div className="chat-input-bar">
+          <textarea
+            ref={inputRef}
+            className="chat-input"
+            value={input}
+            onChange={e => setInput(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder="Ask a question..."
+            rows={1}
+            disabled={loading}
+          />
+          <button
+            className="chat-send-btn"
+            onClick={handleSend}
+            disabled={loading || !input.trim()}
+          >
+            Send
+          </button>
+        </div>
+      )}
     </div>
   );
 }

@@ -153,13 +153,15 @@ export default function ChapterDisplay({
             onMouseDown={handleMouseDown}
           />
           <div className="panel-right" style={{ width: `${100 - splitPercent}%` }}>
-            <ExplanationPanel explanation={chapter.explanation} />
-            {chatAvailable && (
-              <ChatPanel
-                storyId={storyId}
-                chapterId={chapter.id}
-              />
-            )}
+            <div className="panel-right-scroll">
+              <ExplanationPanel explanation={chapter.explanation} />
+              {chatAvailable && (
+                <ChatPanel
+                  storyId={storyId}
+                  chapterId={chapter.id}
+                />
+              )}
+            </div>
           </div>
         </div>
       )}
