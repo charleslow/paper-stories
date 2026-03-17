@@ -8,7 +8,7 @@
  * Usage:
  *   paper-stories generate <arxiv-url> [--query "..."] [--output-dir ./out]
  *   paper-stories generate 2401.12345 --query "attention mechanism"
- *   paper-stories generate --local --pdf ./ch4.pdf [--latex-dir ./ch4/] --title "Chapter 4"
+ *   paper-stories generate --pdf ./ch4.pdf [--latex-dir ./ch4/] --title "Chapter 4"
  */
 
 import { Command } from 'commander';
@@ -36,23 +36,21 @@ program
 program
   .command('generate')
   .description('Generate a story from an arXiv paper or local PDF')
-  .argument('[arxiv]', 'arXiv URL or paper ID (e.g., 2401.12345). Omit when using --local.')
+  .argument('[arxiv]', 'arXiv URL or paper ID (e.g., 2401.12345). Omit when using --pdf.')
   .option('-q, --query <query>', 'Optional focus query for the story')
   .option('-o, --output-dir <dir>', 'Output directory', '.')
   .option('-c, --cache-repo <path>', 'Path to code-stories-cache repo for direct publishing')
   .option('-s, --slug <slug>', 'Story slug for the output filename')
-  .option('--local', 'Use local PDF instead of arXiv')
-  .option('--pdf <path>', 'Path to local PDF file (required with --local)')
-  .option('--latex-dir <path>', 'Path to local LaTeX source directory (optional with --local)')
-  .option('--title <title>', 'Title for the story (used with --local)')
-  .option('--textbook', 'Use textbook mode — slower pace, more chapters, insightful questions')
+  .option('--pdf <path>', 'Path to local PDF file (for textbooks, chapters, or any non-arXiv source)')
+  .option('--latex-dir <path>', 'Path to local LaTeX source directory (optional, used with --pdf)')
+  .option('--title <title>', 'Title for the story (used with --pdf)')
   .action(async (arxiv, options) => {
     try {
-      if (options.local) {
+      if (options.pdf) {
         await generateLocalStory(options);
       } else {
         if (!arxiv) {
-          console.error('✗ Error: arXiv URL or ID is required (or use --local --pdf <path>)');
+          console.error('✗ Error: provide an arXiv URL/ID or use --pdf <path>');
           process.exit(1);
         }
         await generateStory(arxiv, options);
@@ -69,15 +67,10 @@ program.parse();
  * Generate a story from a local PDF (textbook chapter, etc.)
  */
 async function generateLocalStory(options) {
-  if (!options.pdf) {
-    throw new Error('--pdf <path> is required when using --local mode');
-  }
-
   const generationId = uuidv4();
   const title = options.title || 'Local Document';
-  const isTextbook = !!options.textbook;
 
-  console.log(`\n📄 Paper Stories Generator (local mode${isTextbook ? ' — textbook' : ''})`);
+  console.log(`\n📄 Paper Stories Generator (local PDF)`);
   console.log(`   PDF: ${resolve(options.pdf)}`);
   console.log(`   LaTeX: ${options.latexDir ? resolve(options.latexDir) : '(none)'}`);
   console.log(`   Title: ${title}`);
@@ -125,7 +118,6 @@ async function generateLocalStory(options) {
     regionsPath,
     generationDir,
     title,
-    isTextbook,
   });
 
   // Run the shared generation pipeline
@@ -146,9 +138,8 @@ async function generateStory(arxivInput, options) {
   const arxivId = parseArxivId(arxivInput);
   const arxivUrl = `https://arxiv.org/abs/${arxivId}`;
   const generationId = uuidv4();
-  const isTextbook = !!options.textbook;
 
-  console.log(`\n📄 Paper Stories Generator${isTextbook ? ' (textbook mode)' : ''}`);
+  console.log(`\n📄 Paper Stories Generator`);
   console.log(`   Paper: ${arxivUrl}`);
   console.log(`   Query: ${options.query || '(comprehensive deep-dive)'}`);
   console.log(`   Generation ID: ${generationId}\n`);
@@ -198,7 +189,6 @@ async function generateStory(arxivInput, options) {
     regionsPath,
     generationDir,
     title: null,
-    isTextbook,
   });
 
   // Run the shared generation pipeline

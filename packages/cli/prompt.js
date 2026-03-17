@@ -4,12 +4,12 @@
  * Sent to Claude to generate a story.json from paper/textbook sources.
  * The prompt enforces source fidelity — all excerpts must be verbatim from the source.
  *
- * Supports two modes:
- * - Paper mode (default): Deep-dive into an ML research paper
- * - Textbook mode (--textbook): Slower-paced walkthrough of a textbook chapter
+ * Claude adapts its pacing and style based on the source material:
+ * - Research papers → focused deep-dive, ~20 chapters
+ * - Textbook chapters → slower pedagogical walkthrough, 30-40 chapters
  */
 
-export function buildPrompt({ arxivId, arxivUrl, query, sourceDir, pdfPath, regionsPath, generationDir, title, isTextbook }) {
+export function buildPrompt({ arxivId, arxivUrl, query, sourceDir, pdfPath, regionsPath, generationDir, title }) {
   const hasSource = !!sourceDir;
   const hasPdf = !!pdfPath;
   const hasRegions = !!regionsPath;
@@ -37,91 +37,6 @@ Each block has a \`type\` field: "text" (with a \`text\` field) or "image" (boun
 Use this to assign \`pdfRegion\` fields to excerpts (see Stage 3 for details).`
     : '';
 
-  // Mode-specific guidance
-  const modeDescription = isTextbook
-    ? `You are generating a **textbook chapter walkthrough**. The goal is NOT to replace the textbook, but to provide
-a thorough guided tour of the key concepts so the reader can "clear" the material much faster on a second read-through.
-
-**Textbook mode principles:**
-- **Go slowly.** The reader is not well-versed in this material. It is better to have too many chapters than to rush through a concept.
-- **Cover thoroughly:** Key definitions, theorems, proofs (sketch the intuition), and core ideas should each get their own chapter.
-- **Motivate concepts well.** Before introducing a definition or theorem, explain WHY it matters and what problem it solves.
-- **Build understanding incrementally.** Each chapter should build on the previous ones. Use "As we saw in Chapter N..." connections.
-- **Include insightful questions.** At the end of each chapter's explanation, include 1-3 thought-provoking questions that test understanding or invite deeper thinking. Format them as a "**Questions to consider:**" section. These should NOT be trivial recall questions — they should be the kind of questions a good teacher would ask to check if the student truly understood the concept.
-- **Exercises:** If the source contains particularly good exercises, you may reference them and hint at the approach without giving away the full solution.`
-    : `You are generating a **research paper walkthrough**. Your job is to create a deep, technically rigorous walkthrough
-of the paper, structured as an interactive story.`;
-
-  const chapterCountGuidance = isTextbook
-    ? `**Chapter count**: Textbook chapters are dense and pedagogical. Aim for **30-40 chapters** for a dense textbook chapter.
-Use more chapters rather than fewer — each concept, definition, and theorem deserves space to breathe.
-A chapter that tries to cover too much is worse than two chapters that each explain one thing well.`
-    : `**Chapter count**: Flexible based on query scope and paper length. Default to ~20 for
-comprehensive deep-dives. Use fewer (8-15) for focused queries about a specific aspect.
-Use more (20-25) for long or dense papers. The story should feel complete, not padded.`;
-
-  const structureGuidance = isTextbook
-    ? `**Structure**: Adapt to the textbook chapter's pedagogical flow:
-
-- **Overview** → Set the scene: what is this chapter about and why does it matter?
-- **Motivation / Setup** → What problem or question motivates this material?
-- **Definitions** (one per chapter) → Introduce each key definition carefully with intuition
-- **Key Ideas / Lemmas** → Build up the conceptual machinery
-- **Theorems** (one per chapter) → State, motivate, and sketch the proof intuition
-- **Examples** → Concrete examples that ground the abstractions
-- **Connections** → How concepts relate to each other and to the broader field
-- **Summary** → Key takeaways and what to remember
-
-Each chapter should have ONE clear teaching point. Don't bundle a definition and a theorem into the same chapter unless they're inseparable.`
-    : `**Structure**: Adapt to what the query needs:
-
-For a **comprehensive deep-dive** (no query, or broad query), cover the full paper arc:
-- Overview → Problem → Related Work → Key Insight → Methodology (multiple chapters) →
-  Theoretical Analysis → Experiments/Results → Ablations → Limitations → Summary
-
-For a **focused query** (e.g., "How does the attention mechanism work?"), go deeper on
-the relevant aspect:
-- Brief overview for context → Deep coverage of the queried topic across multiple
-  chapters → Connections to the rest of the paper → Summary
-- Skip or condense sections not relevant to the query`;
-
-  const explanationGuidance = isTextbook
-    ? `- **Tone**: Patient teacher explaining to a motivated student — clear, encouraging, thorough
-- **Depth**: Assume the reader has basic mathematical maturity but is learning this topic for the first time
-- **Structure**: Start with WHY this concept matters, then WHAT it is, then HOW it works, then what to WATCH OUT for
-- **Math**: Use KaTeX-compatible LaTeX in explanations (inline: $...$ , display: $$...$$)
-- **Intuition first**: Always ground formal definitions in intuition before or alongside the formalism
-- **Questions**: End each chapter (except Overview and Summary) with 1-3 "Questions to consider" that test genuine understanding
-- **Length per chapter**:
-  - Overview/Summary: 200-350 words
-  - Definition chapters: 200-300 words (intuition + formal statement + why it matters)
-  - Theorem chapters: 250-400 words (statement + proof sketch/intuition + significance)
-  - Example chapters: 150-250 words
-  - Others: 150-250 words`
-    : `- **Tone**: Knowledgeable colleague explaining the paper — technical but accessible
-- **Depth**: Assume reader has ML background but hasn't read this paper
-- **Structure**: Start with WHY, then WHAT, then HOW
-- **Math**: Use KaTeX-compatible LaTeX in explanations (inline: $...$ , display: $$...$$)
-- **Length per chapter**:
-  - Overview/Summary: 200-300 words
-  - Methodology chapters: 150-250 words
-  - Results/Ablations: 100-200 words
-  - Others: 120-200 words`;
-
-  const totalChaptersRange = isTextbook ? '15-45 range' : '8-25 range';
-
-  const excerptCountGuidance = isTextbook
-    ? `- 1-3 excerpts per chapter (first and last chapters have 0 excerpts)
-- Use multiple excerpts when a chapter covers a definition + its immediate example, or a theorem statement + a key step in the proof
-- Prefer excerpts that teach something concrete — definitions, theorem statements, key equations, illuminating examples`
-    : `- Exactly 1 excerpt per chapter (first and last chapters have 0 excerpts)
-- Prefer excerpts that teach something concrete
-- For text, include enough context to be meaningful (2-6 sentences)`;
-
-  const excerptValidation = isTextbook
-    ? `3b. All other chapters have 1-3 excerpts`
-    : `3b. All other chapters have exactly 1 excerpt`;
-
   // Schema: use arxivId/arxivUrl if available, otherwise use title/sourceType
   const schemaFields = arxivId
     ? `"arxivId": "${arxivId}",
@@ -130,7 +45,36 @@ the relevant aspect:
   "arxivUrl": null,
   "sourceType": "local",`;
 
-  return `You are a Paper Stories generator. ${modeDescription}
+  return `You are a Paper Stories generator. Your job is to create a deep, technically rigorous walkthrough
+of the source material, structured as an interactive story.
+
+## Adapting to the Source Material
+
+After reading the source in Stage 1, decide how to approach it:
+
+**If the source is a research paper** (has abstract, contributions, experiments, related work):
+- Tone: Knowledgeable colleague explaining the paper — technical but accessible
+- Assume the reader has ML background but hasn't read this paper
+- Pace: ~20 chapters for a comprehensive deep-dive, 8-15 for focused queries, up to 25 for dense papers
+- Structure: Overview → Problem → Related Work → Key Insight → Methodology → Experiments → Ablations → Limitations → Summary
+- Per-chapter length: Overview/Summary 200-300 words, Methodology 150-250, Results 100-200, Others 120-200
+- Excerpts: Exactly 1 per chapter (first and last chapters have 0)
+
+**If the source is a textbook chapter** (has definitions, theorems, proofs, exercises, pedagogical structure):
+- Tone: Patient teacher explaining to a motivated student — clear, encouraging, thorough
+- Assume the reader has basic mathematical maturity but is learning this topic for the first time
+- The goal is NOT to replace the textbook, but to provide a guided tour of key concepts so the reader can "clear" the material much faster on a second read-through
+- **Go slowly.** It is better to have too many chapters than to rush through a concept. Aim for **30-40 chapters**.
+- **Motivate concepts well.** Before introducing a definition or theorem, explain WHY it matters and what problem it solves.
+- **Cover thoroughly:** Key definitions, theorems, proofs (sketch the intuition), and core ideas should each get their own chapter. One teaching point per chapter.
+- **Build incrementally.** Use "As we saw in Chapter N..." connections.
+- **Include 1-3 insightful questions** at the end of each chapter (except Overview and Summary). Format as "**Questions to consider:**". These should NOT be trivial recall — they should test genuine understanding or invite deeper thinking.
+- **Exercises:** If the source contains good exercises, reference them and hint at the approach without giving away the solution.
+- Structure: Overview → Motivation → Definitions (one per chapter) → Key Ideas → Theorems (one per chapter) → Examples → Connections → Summary
+- Per-chapter length: Overview/Summary 200-350 words, Definitions 200-300, Theorems 250-400, Examples 150-250, Others 150-250
+- Excerpts: 1-3 per chapter (first and last chapters have 0). Use multiple when a chapter covers definition + example, or theorem + proof step.
+
+For anything in between (survey papers, tutorial-style papers, technical reports), use your judgment to blend the approaches.
 
 ## Source
 ${sourceIdentification}
@@ -163,15 +107,14 @@ Execute these stages in order, writing checkpoint files after each:
 - ${hasSource ? 'Read all .tex files (start with main .tex, follow \\\\input{} / \\\\include{} references)' : 'Read the PDF thoroughly, page by page'}
 - ${hasPdf && hasSource ? 'Read the PDF for overview context' : ''}
 - Map the structure: sections, key equations, theorems, algorithms, tables, figures
+- **Determine the source type** (research paper vs. textbook chapter vs. other) and note this in your exploration file — this will guide your approach for the rest of the pipeline
 - Write findings to ${generationDir}/exploration.md
 - End the file with the line: EXPLORATION_COMPLETE
 
 ### Stage 2: Chapter Outline
 Design chapters that best serve the user's query and the source content.
 
-${chapterCountGuidance}
-
-${structureGuidance}
+Adapt your chapter count and structure based on what you determined in Stage 1 (see "Adapting to the Source Material" above).
 
 **Required constraints**:
 - First chapter: Overview (no excerpts) — orient the reader
@@ -228,7 +171,10 @@ For each excerpt, find the matching block(s) in the regions index and add a \`pd
 8. Some figures use vector graphics rather than embedded images — these won't appear as image blocks. That's fine, just omit \`pdfRegion\` for those.
 
 Guidelines:
-${excerptCountGuidance}
+- Prefer excerpts that teach something concrete — definitions, theorem statements, key equations, illuminating examples
+- For text, include enough context to be meaningful (2-6 sentences)
+- For research papers: exactly 1 excerpt per chapter (first and last chapters have 0)
+- For textbook chapters: 1-3 excerpts per chapter (first and last have 0). Use multiple when covering definition + example, or theorem + proof step.
 
 Write excerpts to ${generationDir}/excerpts.md
 End the file with: EXCERPTS_COMPLETE
@@ -246,10 +192,13 @@ End the file with: VERIFICATION_COMPLETE
 ### Stage 5: Explanation Writing
 Write the explanation markdown for each chapter:
 
-${explanationGuidance}
+- **Structure**: Start with WHY this concept matters, then WHAT it is, then HOW it works, then what to WATCH OUT for
+- **Intuition first**: Always ground formal definitions in intuition before or alongside the formalism
+- **Math**: Use KaTeX-compatible LaTeX in explanations (inline: $...$ , display: $$...$$)
 - **Cross-references**: Connect chapters ("As we saw in Chapter 3..." or "This connects to the loss function in the next chapter")
 - **Vary transitions**: Don't start more than 2 chapters with the same pattern
 - **Critical analysis**: Don't just describe — interpret. "This is clever because...", "The limitation here is...", "Compared to X, this approach..."
+- Adapt tone and depth to the source type (see "Adapting to the Source Material" above)
 
 Write explanations to ${generationDir}/explanations.md
 End the file with: EXPLANATIONS_COMPLETE
@@ -289,13 +238,13 @@ Assemble everything into a single story.json file.
 1. Every excerpt.latexSource exists ${hasSource ? 'verbatim in the source files' : 'faithfully in the PDF'}
 2. Every excerpt has a non-empty latexSource field
 3. First chapter (Overview) and last chapter (Summary) have \`excerpts: []\`
-${excerptValidation}
-4. Chapter labels are 2-4 words
-5. Chapter IDs are sequential: chapter-0, chapter-1, ...
-6. All KaTeX in explanations uses valid LaTeX syntax
-7. No hallucinated claims — everything is grounded in the source
-8. Total chapters: ${totalChaptersRange} (flexible based on query and content density)
-9. If regions index was available, most excerpts should have a \`pdfRegion\` with valid page and bbox values
+4. All other chapters have at least 1 excerpt
+5. Chapter labels are 2-4 words
+6. Chapter IDs are sequential: chapter-0, chapter-1, ...
+7. All KaTeX in explanations uses valid LaTeX syntax
+8. No hallucinated claims — everything is grounded in the source
+9. Total chapters: flexible based on source type and content density (8-45 range)
+10. If regions index was available, most excerpts should have a \`pdfRegion\` with valid page and bbox values
 
 Write the final story.json to ${generationDir}/story.json
 After writing, end by creating a file ${generationDir}/DONE containing just the text "DONE".

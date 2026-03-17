@@ -1,7 +1,6 @@
 /**
  * Validates a story JSON object. Throws if invalid.
  *
- * Supports both paper mode (1 excerpt per chapter) and textbook mode (1-3 excerpts per chapter).
  * arxivId and arxivUrl are optional (may be null for local sources).
  */
 export function validateStory(story) {
