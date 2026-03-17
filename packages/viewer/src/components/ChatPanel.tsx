@@ -18,26 +18,17 @@ export default function ChatPanel({
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [expanded, setExpanded] = useState(false);
   const [historyLoaded, setHistoryLoaded] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  // Reset messages when chapter changes while collapsed
+  // Load chat history when chapter changes
   useEffect(() => {
-    if (!expanded) {
-      setMessages([]);
-      setHistoryLoaded(null);
-    }
-  }, [chapterId, expanded]);
-
-  // Load chat history only when expanded AND history not yet loaded for this chapter
-  useEffect(() => {
-    if (!expanded) return;
     const key = `${storyId}:${chapterId}`;
     if (historyLoaded === key) return;
 
     let cancelled = false;
+    setMessages([]);
     fetchChatHistory(storyId).then(chatData => {
       if (!cancelled) {
         setMessages(chatData.chapters[chapterId] || []);
@@ -45,19 +36,12 @@ export default function ChatPanel({
       }
     });
     return () => { cancelled = true; };
-  }, [storyId, chapterId, expanded, historyLoaded]);
+  }, [storyId, chapterId, historyLoaded]);
 
   // Auto-scroll to bottom on new messages
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
-
-  // Focus input when expanded
-  useEffect(() => {
-    if (expanded) {
-      inputRef.current?.focus();
-    }
-  }, [expanded]);
 
   const handleSend = useCallback(async () => {
     const trimmed = input.trim();
@@ -96,25 +80,10 @@ export default function ChatPanel({
     }
   };
 
-  if (!expanded) {
-    return (
-      <button className="chat-collapsed-bar" onClick={() => setExpanded(true)}>
-        <span className="chat-collapsed-icon">?</span>
-        Ask about this chapter
-        {messages.length > 0 && (
-          <span className="chat-message-count">{messages.length}</span>
-        )}
-      </button>
-    );
-  }
-
   return (
     <div className="chat-panel">
       <div className="chat-header">
         <span className="chat-header-title">Ask about this chapter</span>
-        <button className="chat-collapse-btn" onClick={() => setExpanded(false)}>
-          Collapse
-        </button>
       </div>
 
       <div className="chat-messages">
