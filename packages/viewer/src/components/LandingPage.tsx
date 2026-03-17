@@ -3,23 +3,11 @@ import { Theme } from '../types';
 import { fetchLocalStories, type LocalStory } from '../api';
 import ThemeToggle from './ThemeToggle';
 
-interface RecentStory {
-  url: string;
-  title: string;
-  arxivId?: string;
-  accessedAt: string;
-}
-
 export default function LandingPage({ theme, onToggleTheme }: { theme: Theme; onToggleTheme: () => void }) {
   const [input, setInput] = useState('');
-  const [recent, setRecent] = useState<RecentStory[]>([]);
   const [localStories, setLocalStories] = useState<LocalStory[]>([]);
 
   useEffect(() => {
-    try {
-      const stored = JSON.parse(localStorage.getItem('paper-stories-recent') || '[]');
-      setRecent(stored);
-    } catch { /* ignore */ }
     fetchLocalStories().then(setLocalStories);
   }, []);
 
@@ -99,24 +87,7 @@ export default function LandingPage({ theme, onToggleTheme }: { theme: Theme; on
           </div>
         )}
 
-        {recent.length > 0 && (
-          <div className="landing-recent">
-            <h3>Recent Stories</h3>
-            <ul>
-              {recent.map((r, i) => (
-                <li key={i}>
-                  <a href={r.url}>
-                    {r.title}
-                    {r.arxivId && <span className="recent-arxiv"> ({r.arxivId})</span>}
-                  </a>
-                  <span className="recent-date">
-                    {new Date(r.accessedAt).toLocaleDateString()}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
+
       </div>
     </div>
   );
