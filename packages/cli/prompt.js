@@ -16,7 +16,7 @@ export function buildPrompt({ arxivId, arxivUrl, query, sourceDir, pdfPath, regi
   // Source identification
   const sourceIdentification = arxivId
     ? `- arXiv ID: ${arxivId}\n- URL: ${arxivUrl}`
-    : `- Title: ${title || 'Local Document'}\n- Source: Local PDF${hasSource ? ' + LaTeX' : ''}`;
+    : `- Source: Local PDF${hasSource ? ' + LaTeX' : ''}\n- Title: Detect from source content (use the document's own title, chapter heading, or create a concise descriptive title)`;
 
   const sourceInstructions = hasSource
     ? `The source's LaTeX files are available at: ${sourceDir}

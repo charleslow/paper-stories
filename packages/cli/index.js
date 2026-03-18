@@ -8,7 +8,7 @@
  * Usage:
  *   paper-stories generate <arxiv-url> [--query "..."] [--output-dir ./out]
  *   paper-stories generate 2401.12345 --query "attention mechanism"
- *   paper-stories generate --pdf ./ch4.pdf --title "Chapter 4"
+ *   paper-stories generate --pdf ./ch4.pdf
  */
 
 import { Command } from 'commander';
@@ -43,7 +43,6 @@ program
   .option('-c, --cache-repo <path>', 'Path to code-stories-cache repo for direct publishing')
   .option('-s, --slug <slug>', 'Story slug for the output filename')
   .option('--pdf <path>', 'Path to local PDF file (for textbooks, chapters, or any non-arXiv source)')
-  .option('--title <title>', 'Title for the story (used with --pdf)')
   .action(async (arxiv, options) => {
     try {
       if (options.pdf && arxiv) {
@@ -72,11 +71,9 @@ program.parse();
  */
 async function generateLocalStory(options) {
   const generationId = uuidv4();
-  const title = options.title || 'Local Document';
 
   console.log(`\n📄 Paper Stories Generator (local PDF)`);
   console.log(`   PDF: ${resolve(options.pdf)}`);
-  console.log(`   Title: ${title}`);
   console.log(`   Query: ${options.query || '(comprehensive deep-dive)'}`);
   console.log(`   Generation ID: ${generationId}\n`);
 
@@ -118,7 +115,7 @@ async function generateLocalStory(options) {
     pdfPath,
     regionsPath,
     generationDir,
-    title,
+    title: null,
   });
 
   // Run the shared generation pipeline
