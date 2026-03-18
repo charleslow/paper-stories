@@ -1,17 +1,27 @@
 # Paper Stories 📄
 
-Interactive deep-dives into ML research papers. Like [Code Stories](https://charleslow.github.io/code-stories/), but for understanding papers instead of codebases.
+Interactive deep-dives into ML research papers and textbook chapters. Like [Code Stories](https://charleslow.github.io/code-stories/), but for understanding papers and textbooks instead of codebases.
 
 ## How it works
 
-1. **CLI** takes an arXiv URL → downloads LaTeX source + PDF → extracts text regions with bounding boxes → uses Claude to generate a structured walkthrough with PDF locations
+1. **CLI** takes an arXiv URL or a local PDF → downloads/reads the source → extracts text regions with bounding boxes → uses Claude to generate a structured walkthrough with PDF locations
 2. **Viewer** (React + Vite + KaTeX) renders the story with a two-panel layout:
-   - **Left panel**: Verbatim paper excerpts (text + equations) with collapsible LaTeX source verification and PDF page badges
+   - **Left panel**: Verbatim excerpts (text + equations) with collapsible LaTeX source verification and PDF page badges
    - **Right panel**: Expert explanations with inline math
+
+The CLI auto-detects whether the source is a **research paper** or a **textbook chapter** and adapts accordingly:
+
+| | Research Paper | Textbook Chapter |
+|---|---|---|
+| **Input** | arXiv URL | Local PDF (`--pdf`) |
+| **Chapters** | ~20 (8–15 with `--query`) | 30–40 |
+| **Excerpts/chapter** | 1 | 1–3 (e.g. definition + example) |
+| **Tone** | Knowledgeable colleague | Patient teacher |
+| **Structure** | Problem → Method → Experiments → Results | Motivation → Definitions → Theorems → Examples |
 
 ## Quick start
 
-### Generate a story
+### Generate a story from an arXiv paper
 
 ```bash
 cd packages/cli
@@ -19,7 +29,14 @@ npm install
 node index.js generate https://arxiv.org/abs/1706.03762 --query "attention mechanism"
 ```
 
+### Generate a story from a textbook chapter (local PDF)
+
+```bash
+node index.js generate --pdf ./linear-algebra-ch3.pdf --query "eigenvalues" --slug "eigenvalues"
+```
+
 Options:
+- `--pdf <path>` — Use a local PDF instead of an arXiv URL (e.g. a textbook chapter)
 - `-q, --query <query>` — Focus the story on a specific aspect
 - `-c, --cache-repo <path>` — Publish directly to code-stories-cache repo
 - `-s, --slug <slug>` — Custom story slug
