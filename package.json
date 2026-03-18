@@ -5,6 +5,6 @@
     "packages/*"
   ],
   "scripts": {
-    "test": "node --test packages/cli/validate.test.js && npm test --workspace=packages/viewer"
+    "test": "node --test packages/cli/validate.test.js packages/cli/local.test.js && npm test --workspace=packages/viewer"
   }
 }

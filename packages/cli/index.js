@@ -8,7 +8,7 @@
  * Usage:
  *   paper-stories generate <arxiv-url> [--query "..."] [--output-dir ./out]
  *   paper-stories generate 2401.12345 --query "attention mechanism"
- *   paper-stories generate --pdf ./ch4.pdf [--latex-dir ./ch4/] --title "Chapter 4"
+ *   paper-stories generate --pdf ./ch4.pdf --title "Chapter 4"
  */
 
 import { Command } from 'commander';
@@ -19,7 +19,8 @@ import { fileURLToPath } from 'url';
 import { v4 as uuidv4 } from 'uuid';
 import ora from 'ora';
 import { parseArxivId, downloadLatexSource, downloadPdf } from './arxiv.js';
-import { prepareLocalSource, prepareLocalPdf } from './local.js';
+import { prepareLocalPdf } from './local.js';
+import { emptySourceResult } from './source-utils.js';
 import { buildPrompt } from './prompt.js';
 import { validateStory } from './validate.js';
 
@@ -42,10 +43,13 @@ program
   .option('-c, --cache-repo <path>', 'Path to code-stories-cache repo for direct publishing')
   .option('-s, --slug <slug>', 'Story slug for the output filename')
   .option('--pdf <path>', 'Path to local PDF file (for textbooks, chapters, or any non-arXiv source)')
-  .option('--latex-dir <path>', 'Path to local LaTeX source directory (optional, used with --pdf)')
   .option('--title <title>', 'Title for the story (used with --pdf)')
   .action(async (arxiv, options) => {
     try {
+      if (options.pdf && arxiv) {
+        console.error('✗ Error: --pdf and an arXiv URL/ID are mutually exclusive. Use one or the other.');
+        process.exit(1);
+      }
       if (options.pdf) {
         await generateLocalStory(options);
       } else {
@@ -72,7 +76,6 @@ async function generateLocalStory(options) {
 
   console.log(`\n📄 Paper Stories Generator (local PDF)`);
   console.log(`   PDF: ${resolve(options.pdf)}`);
-  console.log(`   LaTeX: ${options.latexDir ? resolve(options.latexDir) : '(none)'}`);
   console.log(`   Title: ${title}`);
   console.log(`   Query: ${options.query || '(comprehensive deep-dive)'}`);
   console.log(`   Generation ID: ${generationId}\n`);
@@ -82,11 +85,9 @@ async function generateLocalStory(options) {
   const generationDir = join(workDir, 'generation');
   mkdirSync(generationDir, { recursive: true });
 
-  // Prepare local sources
+  // Prepare local PDF
   console.log('📂 Preparing local sources...');
-  const sourceResult = options.latexDir
-    ? prepareLocalSource(options.latexDir)
-    : { sourceDir: null, hasSource: false, texFiles: [], allFiles: [] };
+  const sourceResult = emptySourceResult();
   const pdfPath = prepareLocalPdf(options.pdf, workDir);
 
   // Extract PDF text regions

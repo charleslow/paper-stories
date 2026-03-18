@@ -2,8 +2,9 @@
  * Local source adapter for textbook chapters and local PDFs.
  * Provides the same interface as arxiv.js but for local files.
  */
-import { existsSync, readdirSync, statSync, copyFileSync, mkdirSync } from 'fs';
-import { join, resolve, extname } from 'path';
+import { existsSync, copyFileSync } from 'fs';
+import { join, resolve } from 'path';
+import { listFilesRecursive, emptySourceResult, assertSourceResult } from './source-utils.js';
 
 /**
  * Prepare local LaTeX source directory.
@@ -12,7 +13,7 @@ import { join, resolve, extname } from 'path';
  */
 export function prepareLocalSource(latexDir) {
   if (!latexDir) {
-    return { sourceDir: null, hasSource: false, texFiles: [], allFiles: [] };
+    return emptySourceResult();
   }
 
   const resolved = resolve(latexDir);
@@ -25,11 +26,11 @@ export function prepareLocalSource(latexDir) {
 
   if (texFiles.length === 0) {
     console.log(`  ⚠ No .tex files found in ${resolved}`);
-    return { sourceDir: resolved, hasSource: false, texFiles: [], allFiles: files };
+    return assertSourceResult({ sourceDir: resolved, hasSource: false, texFiles: [], allFiles: files });
   }
 
   console.log(`  ✓ Found ${files.length} files (${texFiles.length} .tex files) in ${resolved}`);
-  return { sourceDir: resolved, hasSource: true, texFiles, allFiles: files };
+  return assertSourceResult({ sourceDir: resolved, hasSource: true, texFiles, allFiles: files });
 }
 
 /**
@@ -50,27 +51,3 @@ export function prepareLocalPdf(pdfPath, workDir) {
   return destPath;
 }
 
-/**
- * Recursively list all files in a directory.
- */
-function listFilesRecursive(dir, prefix = '') {
-  const results = [];
-  if (!existsSync(dir)) return results;
-
-  for (const entry of readdirSync(dir)) {
-    const fullPath = join(dir, entry);
-    const relPath = prefix ? `${prefix}/${entry}` : entry;
-
-    try {
-      const stat = statSync(fullPath);
-      if (stat.isDirectory()) {
-        results.push(...listFilesRecursive(fullPath, relPath));
-      } else {
-        results.push(relPath);
-      }
-    } catch {
-      // Skip unreadable files
-    }
-  }
-  return results;
-}
