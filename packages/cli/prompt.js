@@ -13,8 +13,6 @@ export function buildPrompt({ arxivId, arxivUrl, query, sourceDir, pdfPath, regi
   const hasSource = !!sourceDir;
   const hasPdf = !!pdfPath;
   const hasRegions = !!regionsPath;
-  const isLocal = !arxivId;
-
   // Source identification
   const sourceIdentification = arxivId
     ? `- arXiv ID: ${arxivId}\n- URL: ${arxivUrl}`
@@ -68,7 +66,7 @@ After reading the source in Stage 1, decide how to approach it:
 - **Motivate concepts well.** Before introducing a definition or theorem, explain WHY it matters and what problem it solves.
 - **Cover thoroughly:** Key definitions, theorems, proofs (sketch the intuition), and core ideas should each get their own chapter. One teaching point per chapter.
 - **Build incrementally.** Use "As we saw in Chapter N..." connections.
-- **Include 1-3 insightful questions** at the end of each chapter (except Overview and Summary). Format as "**Questions to consider:**". These should NOT be trivial recall — they should test genuine understanding or invite deeper thinking.
+- **Include 1-3 insightful questions** at the end of the story (in the Summary chapter's explanation). Format as "**Questions to consider:**". These can be drawn from good exercises in the source or created to test genuine understanding and invite deeper thinking. These should NOT be trivial recall.
 - **Exercises:** If the source contains good exercises, reference them and hint at the approach without giving away the solution.
 - Structure: Overview → Motivation → Definitions (one per chapter) → Key Ideas → Theorems (one per chapter) → Examples → Connections → Summary
 - Per-chapter length: Overview/Summary 200-350 words, Definitions 200-300, Theorems 250-400, Examples 150-250, Others 150-250
