@@ -6,7 +6,7 @@ interface SidebarProps {
   currentChapter: number;
   onSelect: (index: number) => void;
   title: string;
-  arxivUrl: string;
+  arxivUrl: string | null;
   theme: Theme;
   onToggleTheme: () => void;
 }
@@ -16,9 +16,11 @@ export default function Sidebar({ chapters, currentChapter, onSelect, title, arx
     <aside className="sidebar">
       <div className="sidebar-header">
         <h1 className="sidebar-title">{title}</h1>
-        <a href={arxivUrl} target="_blank" rel="noopener noreferrer" className="sidebar-arxiv-link">
-          📄 arXiv
-        </a>
+        {arxivUrl && (
+          <a href={arxivUrl} target="_blank" rel="noopener noreferrer" className="sidebar-arxiv-link">
+            📄 arXiv
+          </a>
+        )}
       </div>
       <nav className="sidebar-chapters">
         {chapters.map((ch, i) => (

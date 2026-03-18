@@ -11,8 +11,8 @@ interface ExcerptPanelProps {
   pdfUrl?: string;
   storyMeta?: {
     title: string;
-    arxivId: string;
-    arxivUrl: string;
+    arxivId: string | null;
+    arxivUrl: string | null;
     query: string | null;
   };
 }
@@ -26,14 +26,16 @@ export default function ExcerptPanel({ excerpts, pdfUrl, storyMeta }: ExcerptPan
           <div className="story-meta">
             <div className="meta-icon">📄</div>
             <h2>{storyMeta.title}</h2>
-            <a
-              href={storyMeta.arxivUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="meta-arxiv"
-            >
-              arXiv: {storyMeta.arxivId}
-            </a>
+            {storyMeta.arxivUrl && storyMeta.arxivId && (
+              <a
+                href={storyMeta.arxivUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="meta-arxiv"
+              >
+                arXiv: {storyMeta.arxivId}
+              </a>
+            )}
             {storyMeta.query && (
               <div className="meta-query">
                 <span className="meta-query-label">Focus:</span> {storyMeta.query}

@@ -16,8 +16,8 @@ interface ChapterDisplayProps {
   storyId: string;
   storyMeta: {
     title: string;
-    arxivId: string;
-    arxivUrl: string;
+    arxivId: string | null;
+    arxivUrl: string | null;
     query: string | null;
   };
   theme: Theme;

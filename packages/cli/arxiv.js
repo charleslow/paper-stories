@@ -3,8 +3,9 @@
  * Downloads LaTeX source and PDF from arXiv.
  */
 import { execSync } from 'child_process';
-import { mkdirSync, existsSync, readdirSync, readFileSync, statSync } from 'fs';
-import { join, extname } from 'path';
+import { mkdirSync, existsSync, readFileSync } from 'fs';
+import { join } from 'path';
+import { listFilesRecursive, emptySourceResult, assertSourceResult } from './source-utils.js';
 
 /**
  * Parse an arXiv URL or ID into a normalized paper ID.
@@ -59,7 +60,7 @@ export async function downloadLatexSource(arxivId, outputDir) {
     } else if (fileType.includes('PDF')) {
       // Some papers only have PDF, no source
       console.log('  ⚠ No LaTeX source available (PDF only). Proceeding with PDF.');
-      return { sourceDir: null, hasSource: false };
+      return emptySourceResult();
     } else {
       // Try plain TeX (some papers are a single .tex file, not tarred)
       const content = readFileSync(tarPath, 'utf8');
@@ -68,7 +69,7 @@ export async function downloadLatexSource(arxivId, outputDir) {
         writeFile(join(sourceDir, 'main.tex'), content);
       } else {
         console.log(`  ⚠ Unknown source format: ${fileType}`);
-        return { sourceDir: null, hasSource: false };
+        return emptySourceResult();
       }
     }
 
@@ -77,10 +78,10 @@ export async function downloadLatexSource(arxivId, outputDir) {
     const texFiles = files.filter(f => f.endsWith('.tex'));
     console.log(`  ✓ Extracted ${files.length} files (${texFiles.length} .tex files)`);
 
-    return { sourceDir, hasSource: true, texFiles, allFiles: files };
+    return assertSourceResult({ sourceDir, hasSource: true, texFiles, allFiles: files });
   } catch (err) {
     console.error(`  ✗ Failed to download source: ${err.message}`);
-    return { sourceDir: null, hasSource: false };
+    return emptySourceResult();
   }
 }
 
@@ -114,27 +115,3 @@ export async function downloadPdf(arxivId, outputDir) {
   }
 }
 
-/**
- * Recursively list all files in a directory.
- */
-function listFilesRecursive(dir, prefix = '') {
-  const results = [];
-  if (!existsSync(dir)) return results;
-
-  for (const entry of readdirSync(dir)) {
-    const fullPath = join(dir, entry);
-    const relPath = prefix ? `${prefix}/${entry}` : entry;
-
-    try {
-      const stat = statSync(fullPath);
-      if (stat.isDirectory()) {
-        results.push(...listFilesRecursive(fullPath, relPath));
-      } else {
-        results.push(relPath);
-      }
-    } catch {
-      // Skip unreadable files
-    }
-  }
-  return results;
-}

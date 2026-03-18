@@ -1,5 +1,7 @@
 /**
  * Validates a story JSON object. Throws if invalid.
+ *
+ * arxivId and arxivUrl are optional (may be null for local sources).
  */
 export function validateStory(story) {
   if (!story.id || typeof story.id !== 'string') throw new Error('Missing or invalid story.id');
@@ -23,8 +25,9 @@ export function validateStory(story) {
         throw new Error(`Chapter ${ch.id} (first/last) must have 0 excerpts, got ${ch.excerpts.length}`);
       }
     } else {
-      if (ch.excerpts.length !== 1) {
-        throw new Error(`Chapter ${ch.id} must have exactly 1 excerpt, got ${ch.excerpts.length}`);
+      // Allow 1-3 excerpts per chapter (textbook mode uses multiple, paper mode uses 1)
+      if (ch.excerpts.length < 1 || ch.excerpts.length > 3) {
+        throw new Error(`Chapter ${ch.id} must have 1-3 excerpts, got ${ch.excerpts.length}`);
       }
     }
     for (const ex of ch.excerpts) {
