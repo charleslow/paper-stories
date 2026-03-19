@@ -81,13 +81,21 @@ export default function ChapterDisplay({
     <main className="chapter-display">
       <header className="chapter-header">
         <div className="chapter-nav">
-          <button
-            className="nav-btn"
-            onClick={() => onNavigate(chapterIndex - 1)}
-            disabled={isFirst}
-          >
-            ← Prev
-          </button>
+          <div className="nav-group">
+            <a href="?" className="nav-btn home-btn" title="Back to all stories">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M2 8l6-6 6 6"/>
+                <path d="M4 6.5V13a1 1 0 001 1h2v-3h2v3h2a1 1 0 001-1V6.5"/>
+              </svg>
+            </a>
+            <button
+              className="nav-btn"
+              onClick={() => onNavigate(chapterIndex - 1)}
+              disabled={isFirst}
+            >
+              ← Prev
+            </button>
+          </div>
           <span className="chapter-counter">
             Chapter {chapterIndex + 1} of {totalChapters}
           </span>
