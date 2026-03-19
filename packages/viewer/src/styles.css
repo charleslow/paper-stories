@@ -23,6 +23,7 @@
   --text-primary: #E5E7EB;
   --text-secondary: #D1D5DB;
   --text-muted: #9CA3AF;
+  --text-prose: #D1D5DB;
 
   /* Borders */
   --border-neutral: rgba(255, 255, 255, 0.05);
@@ -37,6 +38,9 @@
   --accent-glow: 0 0 20px rgba(96, 165, 250, 0.4);
   --shadow-elevated: 0 8px 60px rgba(0,0,0,0.6), 0 2px 20px rgba(0,0,0,0.4);
   --shadow-glass: 0 4px 30px rgba(0,0,0,0.3);
+
+  /* Sidebar */
+  --sidebar-hover-bg: rgba(255, 255, 255, 0.04);
 
   /* Layout */
   --sidebar-width: 240px;
@@ -67,6 +71,7 @@
   --text-primary: #111111;
   --text-secondary: #333333;
   --text-muted: #777777;
+  --text-prose: #333333;
 
   /* Borders */
   --border-neutral: rgba(0, 0, 0, 0.15);
@@ -82,6 +87,9 @@
   --accent-glow: none;
   --shadow-elevated: 0 1px 3px rgba(0, 0, 0, 0.12);
   --shadow-glass: 0 1px 2px rgba(0, 0, 0, 0.08);
+
+  /* Sidebar */
+  --sidebar-hover-bg: rgba(0, 0, 0, 0.06);
 
   /* Layout (same) */
   --sidebar-width: 240px;
@@ -187,6 +195,7 @@
 
 html, body {
   height: 100%;
+  overflow: hidden;
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   background: var(--bg-app);
   color: var(--text-primary);
@@ -258,10 +267,10 @@ html, body {
 
 .sidebar-chapter {
   display: flex;
-  align-items: flex-start;
-  gap: 8px;
+  align-items: center;
+  gap: 0.75rem;
   width: 100%;
-  padding: 8px 1.5rem;
+  padding: 0.7rem 1.25rem;
   border: none;
   border-left: 3px solid transparent;
   background: transparent;
@@ -275,8 +284,9 @@ html, body {
 }
 
 .sidebar-chapter:hover {
-  background: rgba(255, 255, 255, 0.03);
-  transform: translateX(4px);
+  background: var(--sidebar-hover-bg);
+  color: var(--text-primary);
+  border-left-color: var(--accent-border);
 }
 
 .sidebar-chapter.active {
@@ -292,13 +302,23 @@ html, body {
 
 .chapter-indicator {
   flex-shrink: 0;
-  font-size: 10px;
-  margin-top: 3px;
+  font-size: 0.625rem;
+  opacity: 0.7;
+  width: 1.25rem;
+  height: 1.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
   color: var(--text-muted);
 }
 
 .chapter-label {
   flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.4;
 }
 
 .sidebar-footer {
@@ -743,7 +763,7 @@ html, body {
   font-weight: 450;
   line-height: 1.6;
   letter-spacing: 0.01em;
-  color: var(--text-primary);
+  color: var(--text-prose);
 }
 
 .explanation-content h1,
@@ -770,13 +790,13 @@ html, body {
 }
 
 .explanation-content p {
-  margin-bottom: 14px;
+  margin-bottom: 1.125rem;
 }
 
 .explanation-content ul,
 .explanation-content ol {
-  margin-bottom: 14px;
-  padding-left: 24px;
+  margin-bottom: 1.125rem;
+  padding-left: 1.5rem;
 }
 
 .explanation-content li {
@@ -1350,5 +1370,9 @@ html, body {
 
   .app-layout {
     flex-direction: column;
+  }
+
+  .explanation-panel {
+    padding: 1.5rem 1rem;
   }
 }
