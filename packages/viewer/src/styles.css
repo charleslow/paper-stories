@@ -366,6 +366,21 @@ html, body {
   justify-content: space-between;
 }
 
+.nav-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.home-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 5px 8px;
+  text-decoration: none;
+  color: var(--text-secondary);
+}
+
 .nav-btn {
   padding: 5px 14px;
   background: var(--bg-elevated);
