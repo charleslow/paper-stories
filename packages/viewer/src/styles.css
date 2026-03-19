@@ -39,6 +39,9 @@
   --shadow-elevated: 0 8px 60px rgba(0,0,0,0.6), 0 2px 20px rgba(0,0,0,0.4);
   --shadow-glass: 0 4px 30px rgba(0,0,0,0.3);
 
+  /* Sidebar */
+  --sidebar-hover-bg: rgba(255, 255, 255, 0.04);
+
   /* Layout */
   --sidebar-width: 240px;
   --radius-primary: 12px;
@@ -84,6 +87,9 @@
   --accent-glow: none;
   --shadow-elevated: 0 1px 3px rgba(0, 0, 0, 0.12);
   --shadow-glass: 0 1px 2px rgba(0, 0, 0, 0.08);
+
+  /* Sidebar */
+  --sidebar-hover-bg: rgba(0, 0, 0, 0.06);
 
   /* Layout (same) */
   --sidebar-width: 240px;
@@ -278,9 +284,9 @@ html, body {
 }
 
 .sidebar-chapter:hover {
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--sidebar-hover-bg);
   color: var(--text-primary);
-  border-left-color: rgba(96, 165, 250, 0.4);
+  border-left-color: var(--accent-border);
 }
 
 .sidebar-chapter.active {
@@ -785,14 +791,12 @@ html, body {
 
 .explanation-content p {
   margin-bottom: 1.125rem;
-  color: var(--text-prose);
 }
 
 .explanation-content ul,
 .explanation-content ol {
   margin-bottom: 1.125rem;
   padding-left: 1.5rem;
-  color: var(--text-prose);
 }
 
 .explanation-content li {
