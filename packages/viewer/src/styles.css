@@ -212,7 +212,7 @@ html, body {
 
 .app-layout {
   display: flex;
-  height: 100vh;
+  height: 100dvh;
   overflow: hidden;
 }
 
@@ -347,6 +347,7 @@ html, body {
 
 .chapter-display {
   flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -1130,7 +1131,9 @@ html, body {
 
 .chapter-panels-mobile {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 /* ============================================================
