@@ -32,7 +32,7 @@ export default function Sidebar({ chapters, currentChapter, onSelect, title, arx
             <span className="chapter-indicator">
               {i < currentChapter ? '✓' : i === currentChapter ? '●' : '○'}
             </span>
-            <span className="chapter-label">{ch.label}</span>
+            <span className="chapter-label" title={ch.label}>{ch.label}</span>
           </button>
         ))}
       </nav>
