@@ -1,6 +1,7 @@
 {
   "name": "Paper Stories",
   "short_name": "Paper Stories",
+  "id": "/paper-stories",
   "description": "Interactive paper walkthrough stories",
   "start_url": "/",
   "display": "standalone",
