@@ -1,7 +1,7 @@
 {
   "name": "Paper Stories",
   "short_name": "Paper Stories",
-  "id": "/paper-stories",
+  "id": "https://paper-stories.pwa",
   "description": "Interactive paper walkthrough stories",
   "start_url": "/",
   "display": "standalone",
