@@ -17,7 +17,13 @@ function getPdfDocument(url: string): Promise<pdfjsLib.PDFDocumentProxy> {
     return cached;
   }
 
-  cached = pdfjsLib.getDocument(url).promise;
+  cached = pdfjsLib.getDocument({
+    url,
+    disableRange: true,
+    disableStream: true,
+    disableAutoFetch: false,
+    useWorkerFetch: false,
+  }).promise;
   cached.catch(() => {
     // Remove rejected promises so subsequent calls can retry
     docCache.delete(url);
