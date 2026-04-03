@@ -309,11 +309,11 @@ async function handleRequest(req: Connect.IncomingMessage, res: ServerResponse, 
 export default defineConfig({
   base: '/',
   server: {
-    host: '127.0.0.1',
+    host: '0.0.0.0',
     allowedHosts: true,
   },
   preview: {
-    host: '127.0.0.1',
+    host: '0.0.0.0',
     port: 5174,
     allowedHosts: true,
   },
