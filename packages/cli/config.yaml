@@ -6,8 +6,8 @@
 
 models:
   exploration: gpt-5.4
-  outline: gpt-5.4
-  excerpts: gpt-5.4
+  outline: claude-sonnet-4-6
+  excerpts: claude-sonnet-4-6
   verification: gpt-5.4
   explanations: claude-opus-4-6
   assemble: gpt-5.4
