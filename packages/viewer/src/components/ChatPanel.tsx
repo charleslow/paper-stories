@@ -8,21 +8,24 @@ import { sendChatMessage, fetchChatHistory } from '../api';
 interface ChatPanelProps {
   storyId: string;
   chapterId: string;
-  chatModel?: string | null;
+  chatProvider?: string | null;
 }
 
-function assistantLabel(model?: string | null): string {
-  if (model?.startsWith('claude-')) return 'Claude';
-  if (model) return 'Codex';
-  return 'Assistant';
+const PROVIDER_LABELS: Record<string, string> = {
+  claude: 'Claude',
+  codex: 'Codex',
+};
+
+function assistantLabel(provider?: string | null): string {
+  return (provider && PROVIDER_LABELS[provider]) ?? 'Assistant';
 }
 
 export default function ChatPanel({
   storyId,
   chapterId,
-  chatModel,
+  chatProvider,
 }: ChatPanelProps) {
-  const modelLabel = assistantLabel(chatModel);
+  const modelLabel = assistantLabel(chatProvider);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);

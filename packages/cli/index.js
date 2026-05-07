@@ -288,7 +288,7 @@ async function runGenerationPipeline({ prompt, generationDir, workDir, sourceRes
   // Check for story.json
   const storyPath = join(generationDir, 'story.json');
   if (!existsSync(storyPath)) {
-    spinner.fail('Claude did not produce a story.json');
+    spinner.fail('The assemble stage did not produce a story.json');
     console.error('Check generation directory:', generationDir);
     process.exit(1);
   }
@@ -302,6 +302,10 @@ async function runGenerationPipeline({ prompt, generationDir, workDir, sourceRes
     spinner.fail(`Invalid story.json: ${err.message}`);
     process.exit(1);
   }
+
+  // Record which chat model this story was built with so the viewer can use
+  // the same model for routing and labeling regardless of startup config.
+  story.chatModel = options.config.models.chat ?? null;
 
   spinner.succeed(`Story generated: "${story.title}" (${story.chapters.length} chapters)`);
 

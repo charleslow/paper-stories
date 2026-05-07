@@ -27,6 +27,7 @@ export interface Story {
   query: string | null;
   createdAt: string;
   chapters: Chapter[];
+  chatModel?: string | null;
 }
 
 export interface ChatMessage {

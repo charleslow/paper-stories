@@ -4,37 +4,44 @@ import react from '@vitejs/plugin-react'
 import path from 'path'
 import fs from 'fs/promises'
 import { readFileSync } from 'fs'
-import { spawn } from 'child_process'
+import { spawn, spawnSync } from 'child_process'
 import type { ServerResponse } from 'http'
 import { isSafeId, readBody, buildChatPrompt, withFileLock } from './chat-utils'
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+import yaml from 'js-yaml'
 
 function loadChatModel(): string | null {
   const configPaths = [
     path.resolve(__dirname, '../cli/config.yaml'),
     path.resolve(__dirname, '../../config.yaml'),
   ]
-
   for (const configPath of configPaths) {
     try {
-      const lines = readFileSync(configPath, 'utf-8').split('\n')
-      let inModels = false
-      for (const line of lines) {
-        if (/^models\s*:/.test(line)) { inModels = true; continue }
-        if (inModels) {
-          if (/^\S/.test(line) && line.trim() && !line.startsWith('#')) inModels = false
-          const m = line.match(/^\s+chat\s*:\s*(.+)/)
-          if (m) return m[1].trim().replace(/^["']|["']$/g, '')
-        }
-      }
+      const raw = readFileSync(configPath, 'utf-8')
+      const parsed = yaml.load(raw) as { models?: Record<string, string> }
+      const chat = parsed?.models?.chat
+      if (typeof chat === 'string' && chat) return chat
     } catch {
       // Try the next config path.
     }
   }
-
   return null
 }
 
+/** Maps a model string to the provider binary that runs it. */
+function chatProvider(model: string | null | undefined): 'claude' | 'codex' | null {
+  if (model?.startsWith('claude-')) return 'claude'
+  if (model) return 'codex'
+  return null
+}
+
+function isBinaryAvailable(binary: string): boolean {
+  return spawnSync('which', [binary], { stdio: 'ignore' }).status === 0
+}
+
 const chatModel = loadChatModel()
+const globalProvider = chatProvider(chatModel)
+const chatBinaryAvailable = globalProvider !== null && isBinaryAvailable(globalProvider)
 
 // Shared middleware for serving local stories (works in both dev and preview)
 function localStoriesMiddleware(req: Connect.IncomingMessage, res: ServerResponse, next: Connect.NextFunction) {
@@ -174,11 +181,12 @@ function runClaude(prompt: string, storiesDir: string, model?: string | null): P
   })
 }
 
-function runChat(prompt: string, storiesDir: string): Promise<string> {
-  if (chatModel?.startsWith('claude-')) {
-    return runClaude(prompt, storiesDir, chatModel)
+function runChat(prompt: string, storiesDir: string, storyModel?: string | null): Promise<string> {
+  const model = storyModel ?? chatModel
+  if (chatProvider(model) === 'claude') {
+    return runClaude(prompt, storiesDir, model)
   }
-  return runCodex(prompt, storiesDir, chatModel)
+  return runCodex(prompt, storiesDir, model)
 }
 
 // Limit concurrent chat processes
@@ -233,6 +241,7 @@ async function readStoryFile(storiesDir: string, storyId: string) {
   return { filename, data: data as {
     title: string
     arxivId: string
+    chatModel?: string | null
     chapters: { id: string; label: string; excerpts: { latexSource: string; type: string }[]; explanation: string }[]
   }}
 }
@@ -240,7 +249,7 @@ async function readStoryFile(storiesDir: string, storyId: string) {
 async function handleRequest(req: Connect.IncomingMessage, res: ServerResponse, next: Connect.NextFunction, storiesDir: string) {
   // Chat availability check
   if (req.url === '/_chat/available') {
-    return jsonResponse(res, { available: true, model: chatModel ?? null })
+    return jsonResponse(res, { available: chatBinaryAvailable, model: chatModel ?? null, provider: globalProvider })
   }
 
   // Chat history: GET /_chat/:storyId
@@ -325,7 +334,7 @@ async function handleRequest(req: Connect.IncomingMessage, res: ServerResponse, 
         pdfFile,
       })
 
-      const aiReply = await runChat(prompt, storiesDir)
+      const aiReply = await runChat(prompt, storiesDir, story.chatModel)
 
       // Use file lock to prevent concurrent writes to the same chat file.
       await withFileLock(chatPath, async () => {
