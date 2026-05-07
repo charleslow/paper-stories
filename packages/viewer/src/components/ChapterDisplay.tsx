@@ -13,6 +13,7 @@ interface ChapterDisplayProps {
   onNavigate: (index: number) => void;
   pdfUrl?: string;
   chatAvailable: boolean;
+  chatModel: string | null;
   storyId: string;
   storyMeta: {
     title: string;
@@ -32,6 +33,7 @@ export default function ChapterDisplay({
   onNavigate,
   pdfUrl,
   chatAvailable,
+  chatModel,
   storyId,
   storyMeta,
   theme,
@@ -145,6 +147,7 @@ export default function ChapterDisplay({
               <ChatPanel
                 storyId={storyId}
                 chapterId={chapter.id}
+                chatModel={chatModel}
               />
             </div>
           ) : (
@@ -167,6 +170,7 @@ export default function ChapterDisplay({
                 <ChatPanel
                   storyId={storyId}
                   chapterId={chapter.id}
+                  chatModel={chatModel}
                 />
               )}
             </div>

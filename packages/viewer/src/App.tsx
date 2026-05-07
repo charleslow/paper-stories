@@ -10,7 +10,7 @@ type AppState =
   | { status: 'landing' }
   | { status: 'loading'; url: string }
   | { status: 'error'; message: string }
-  | { status: 'ready'; story: Story; currentChapter: number; pdfUrl: string | null; chatAvailable: boolean };
+  | { status: 'ready'; story: Story; currentChapter: number; pdfUrl: string | null; chatAvailable: boolean; chatModel: string | null };
 
 function useTheme() {
   const [theme, setTheme] = useState<Theme>(() => {
@@ -44,8 +44,8 @@ export default function App() {
     if (storyUrl) {
       setState({ status: 'loading', url: storyUrl });
       Promise.all([fetchStory(storyUrl), resolvePdfUrl(storyUrl), checkChatAvailable()])
-        .then(([story, pdfUrl, chatAvailable]) => {
-          setState({ status: 'ready', story, currentChapter: 0, pdfUrl, chatAvailable });
+        .then(([story, pdfUrl, chat]) => {
+          setState({ status: 'ready', story, currentChapter: 0, pdfUrl, chatAvailable: chat.available, chatModel: chat.model });
 
         })
         .catch(err => {
@@ -119,7 +119,7 @@ export default function App() {
     );
   }
 
-  const { story, currentChapter, pdfUrl, chatAvailable } = state;
+  const { story, currentChapter, pdfUrl, chatAvailable, chatModel } = state;
   const chapter = story.chapters[currentChapter];
 
   return (
@@ -141,6 +141,7 @@ export default function App() {
         onNavigate={navigateChapter}
         pdfUrl={pdfUrl ?? undefined}
         chatAvailable={chatAvailable}
+        chatModel={chatModel}
         storyId={story.id}
         storyMeta={{
           title: story.title,

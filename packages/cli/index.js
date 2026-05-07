@@ -18,6 +18,7 @@ import { join, resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { v4 as uuidv4 } from 'uuid';
 import ora from 'ora';
+import { loadDefaultConfig, mergeConfigs, parseModelOverrides } from './config.js';
 import { parseArxivId, downloadLatexSource, downloadPdf } from './arxiv.js';
 import { prepareLocalPdf } from './local.js';
 import { emptySourceResult } from './source-utils.js';
@@ -43,8 +44,13 @@ program
   .option('-c, --cache-repo <path>', 'Path to code-stories-cache repo for direct publishing')
   .option('-s, --slug <slug>', 'Story slug for the output filename')
   .option('--pdf <path>', 'Path to local PDF file (for textbooks, chapters, or any non-arXiv source)')
+  .option('--models <overrides>', 'Override stage models, e.g. exploration=gpt-5.4,explanations=claude-sonnet-4-6')
   .action(async (arxiv, options) => {
     try {
+      options.config = mergeConfigs(
+        loadDefaultConfig(),
+        parseModelOverrides(options.models),
+      );
       if (options.pdf && arxiv) {
         console.error('✗ Error: --pdf and an arXiv URL/ID are mutually exclusive. Use one or the other.');
         process.exit(1);
@@ -201,121 +207,83 @@ async function generateStory(arxivInput, options) {
 }
 
 /**
- * Shared generation pipeline: prompt → Claude → validate → save.
+ * Shared generation pipeline: prompt stages → configured agents → validate → save.
  */
 async function runGenerationPipeline({ prompt, generationDir, workDir, sourceResult, pdfPath, options }) {
   // Write prompt for debugging
   writeFileSync(join(generationDir, '_prompt.md'), prompt);
 
-  // Spawn Claude
-  console.log('\n🤖 Launching Claude for story generation...\n');
+  console.log('\n🤖 Launching configured story generation stages...\n');
 
   const spinner = ora({
     text: 'Stage 1: Exploring sources...',
     color: 'cyan',
   }).start();
 
-  // Progress tracking
   const stages = [
-    { marker: 'EXPLORATION_COMPLETE', label: 'Stage 2: Planning chapter outline...' },
-    { marker: 'OUTLINE_COMPLETE', label: 'Stage 3: Collecting verified excerpts...' },
-    { marker: 'EXCERPTS_COMPLETE', label: 'Stage 4: Verifying excerpts against source...' },
-    { marker: 'VERIFICATION_COMPLETE', label: 'Stage 5: Writing explanations...' },
-    { marker: 'EXPLANATIONS_COMPLETE', label: 'Stage 6: Assembling final story...' },
-    { marker: 'DONE', label: null },
+    {
+      key: 'exploration',
+      marker: 'EXPLORATION_COMPLETE',
+      output: 'exploration.md',
+      label: 'Stage 1: Exploring sources...',
+      task: 'Run only Stage 1: Source Exploration. Write exploration.md and end it with EXPLORATION_COMPLETE. Do not run later stages.',
+    },
+    {
+      key: 'outline',
+      marker: 'OUTLINE_COMPLETE',
+      output: 'outline.md',
+      label: 'Stage 2: Planning chapter outline...',
+      task: 'Run only Stage 2: Chapter Outline. Read exploration.md first, write outline.md, and end it with OUTLINE_COMPLETE. Do not run later stages.',
+    },
+    {
+      key: 'excerpts',
+      marker: 'EXCERPTS_COMPLETE',
+      output: 'excerpts.md',
+      label: 'Stage 3: Collecting verified excerpts...',
+      task: 'Run only Stage 3: Excerpt Collection. Read exploration.md and outline.md first, write excerpts.md, and end it with EXCERPTS_COMPLETE. Do not run later stages.',
+    },
+    {
+      key: 'verification',
+      marker: 'VERIFICATION_COMPLETE',
+      output: 'verification.md',
+      label: 'Stage 4: Verifying excerpts against source...',
+      task: 'Run only Stage 4: Verification. Read exploration.md, outline.md, and excerpts.md first, write verification.md, and end it with VERIFICATION_COMPLETE. Do not run later stages.',
+    },
+    {
+      key: 'explanations',
+      marker: 'EXPLANATIONS_COMPLETE',
+      output: 'explanations.md',
+      label: 'Stage 5: Writing explanations...',
+      task: 'Run only Stage 5: Explanation Writing. Read all prior stage files first, write explanations.md, and end it with EXPLANATIONS_COMPLETE. Do not run later stages.',
+    },
+    {
+      key: 'assemble',
+      marker: 'DONE',
+      output: 'DONE',
+      label: 'Stage 6: Assembling final story...',
+      task: 'Run only Stage 6: Final Assembly. Read all prior stage files first, write story.json, then write DONE containing exactly DONE.',
+    },
   ];
 
-  let currentStage = 0;
-
-  const progressInterval = setInterval(() => {
-    while (currentStage < stages.length) {
-      const { marker, label } = stages[currentStage];
-      const doneFile = join(generationDir, 'DONE');
-      const checkFiles = [
-        join(generationDir, 'exploration.md'),
-        join(generationDir, 'outline.md'),
-        join(generationDir, 'excerpts.md'),
-        join(generationDir, 'verification.md'),
-        join(generationDir, 'explanations.md'),
-        doneFile,
-      ];
-
-      let found = false;
-      for (const f of checkFiles) {
-        if (existsSync(f)) {
-          try {
-            const content = readFileSync(f, 'utf8');
-            if (content.includes(marker)) {
-              found = true;
-              break;
-            }
-          } catch { /* ignore */ }
-        }
-      }
-
-      if (found) {
-        currentStage++;
-        if (label) {
-          spinner.text = label;
-        }
-      } else {
-        break;
-      }
+  try {
+    for (const stage of stages) {
+      spinner.text = `${stage.label} [${options.config.models[stage.key]}]`;
+      await runConfiguredStage({
+        prompt: buildStagePrompt(prompt, stage.task),
+        model: options.config.models[stage.key],
+        generationDir,
+        workDir,
+        sourceResult,
+        pdfPath,
+        expectedPath: join(generationDir, stage.output),
+        marker: stage.marker,
+        stageLabel: stage.label,
+      });
     }
-  }, 2000);
-
-  // Spawn Claude process
-  const claudeResult = await new Promise((resolvePromise, rejectPromise) => {
-    const allowedTools = 'Read,Grep,Glob,Write';
-    const dirs = ['--add-dir', generationDir];
-    if (sourceResult.hasSource) {
-      dirs.push('--add-dir', sourceResult.sourceDir);
-    }
-    if (pdfPath) {
-      dirs.push('--add-dir', workDir);
-    }
-
-    // Strip CLAUDECODE env vars so nested claude sessions don't fail
-    const cleanEnv = { ...process.env };
-    delete cleanEnv.CLAUDECODE;
-    delete cleanEnv.CLAUDE_CODE_ENTRYPOINT;
-    delete cleanEnv.CLAUDE_CODE_SESSION;
-
-    const proc = spawn('claude', ['-p', '--allowedTools', allowedTools, ...dirs], {
-      stdio: ['pipe', 'pipe', 'pipe'],
-      env: cleanEnv,
-    });
-
-    let stdout = '';
-    let stderr = '';
-
-    proc.stdout.on('data', (data) => { stdout += data.toString(); });
-    proc.stderr.on('data', (data) => { stderr += data.toString(); });
-
-    proc.on('close', (code) => {
-      if (code === 0) {
-        resolvePromise({ stdout, stderr });
-      } else {
-        rejectPromise(new Error(`Claude exited with code ${code}\n${stderr}`));
-      }
-    });
-
-    proc.on('error', (err) => {
-      rejectPromise(new Error(`Failed to spawn Claude: ${err.message}`));
-    });
-
-    proc.stdin.write(prompt);
-    proc.stdin.end();
-
-    const cleanup = () => {
-      proc.kill('SIGTERM');
-      process.exit(1);
-    };
-    process.on('SIGINT', cleanup);
-    process.on('SIGTERM', cleanup);
-  });
-
-  clearInterval(progressInterval);
+  } catch (err) {
+    spinner.fail('Generation failed');
+    throw err;
+  }
 
   // Check for story.json
   const storyPath = join(generationDir, 'story.json');
@@ -355,6 +323,139 @@ async function runGenerationPipeline({ prompt, generationDir, workDir, sourceRes
   }
 
   console.log(`\n📁 Generation files kept at: ${generationDir}`);
+}
+
+function buildStagePrompt(fullPrompt, task) {
+  return `${fullPrompt}
+
+## Current Stage Execution
+
+${task}
+
+Important: this invocation is one stage in a multi-agent pipeline. Preserve the schema and constraints from the full Paper Stories instructions above, but do not perform future stages.`;
+}
+
+function runConfiguredStage({ prompt, model, generationDir, workDir, sourceResult, pdfPath, expectedPath, marker, stageLabel }) {
+  const dirs = [generationDir];
+  if (sourceResult.hasSource) dirs.push(sourceResult.sourceDir);
+  if (pdfPath) dirs.push(workDir);
+
+  if (model?.startsWith('claude-')) {
+    return runClaudeStage({ prompt, model, dirs, expectedPath, marker, stageLabel });
+  }
+  return runCodexStage({ prompt, model, dirs, cwd: workDir, expectedPath, marker, stageLabel });
+}
+
+function runClaudeStage({ prompt, model, dirs, expectedPath, marker, stageLabel }) {
+  const allowedTools = 'Read,Grep,Glob,Write';
+  const args = ['-p', '--allowedTools', allowedTools];
+  if (model) args.push('--model', model);
+  for (const dir of dirs) args.push('--add-dir', dir);
+
+  return runAgentProcess({
+    command: 'claude',
+    args,
+    prompt,
+    cwd: process.cwd(),
+    expectedPath,
+    marker,
+    stageLabel,
+    model,
+    notFoundMsg: 'Claude CLI not found. Install it with: npm install -g @anthropic-ai/claude-code',
+  });
+}
+
+function runCodexStage({ prompt, model, dirs, cwd, expectedPath, marker, stageLabel }) {
+  const args = ['exec'];
+  if (model) args.push('--model', model);
+  args.push('--sandbox', 'danger-full-access', '-C', cwd);
+  for (const dir of dirs) args.push('--add-dir', dir);
+  args.push('-');
+
+  return runAgentProcess({
+    command: 'codex',
+    args,
+    prompt,
+    cwd,
+    expectedPath,
+    marker,
+    stageLabel,
+    model,
+    notFoundMsg: 'Codex CLI not found. Install it with: npm install -g @openai/codex',
+  });
+}
+
+function runAgentProcess({ command, args, prompt, cwd, expectedPath, marker, stageLabel, model, notFoundMsg }) {
+  return new Promise((resolvePromise, rejectPromise) => {
+    const cleanEnv = { ...process.env };
+    delete cleanEnv.CLAUDECODE;
+    delete cleanEnv.CLAUDE_CODE_ENTRYPOINT;
+    delete cleanEnv.CLAUDE_CODE_SESSION;
+
+    const proc = spawn(command, args, {
+      stdio: ['pipe', 'pipe', 'pipe'],
+      cwd,
+      env: cleanEnv,
+    });
+
+    let settled = false;
+    let stdout = '';
+    let stderr = '';
+
+    const cleanup = () => {
+      proc.kill('SIGTERM');
+      process.exit(1);
+    };
+    const clearHandlers = () => {
+      process.off('SIGINT', cleanup);
+      process.off('SIGTERM', cleanup);
+    };
+    const settle = (error, value) => {
+      if (settled) return;
+      settled = true;
+      clearHandlers();
+      if (error) rejectPromise(error);
+      else resolvePromise(value);
+    };
+
+    proc.stdout.on('data', (data) => { stdout += data.toString(); });
+    proc.stderr.on('data', (data) => { stderr += data.toString(); });
+
+    proc.on('close', (code) => {
+      if (hasMarker(expectedPath, marker)) {
+        settle(null, { stdout, stderr });
+        return;
+      }
+
+      let message = `${stageLabel} did not produce expected marker ${marker} (exit code: ${code})`;
+      if (model) message += ` [model: ${model}]`;
+      if (stderr) message += `\nstderr: ${stderr.slice(0, 500)}`;
+      if (stdout) message += `\nstdout: ${stdout.slice(0, 500)}`;
+      settle(new Error(message));
+    });
+
+    proc.on('error', (err) => {
+      settle(new Error(err.code === 'ENOENT' ? notFoundMsg : `Failed to spawn ${command}: ${err.message}`));
+    });
+
+    proc.stdin.on('error', () => {
+      // The process exited before the prompt was fully written; close/error will settle.
+    });
+    proc.stdin.write(prompt);
+    proc.stdin.end();
+
+    process.once('SIGINT', cleanup);
+    process.once('SIGTERM', cleanup);
+  });
+}
+
+function hasMarker(filePath, marker) {
+  if (!existsSync(filePath)) return false;
+  try {
+    return readFileSync(filePath, 'utf8').includes(marker);
+  } catch {
+    return false;
+  }
 }
 
 async function publishToCache(story, slug, cacheRepoPath, pdfPath) {

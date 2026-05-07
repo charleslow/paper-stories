@@ -91,14 +91,17 @@ export async function fetchLocalStories(): Promise<LocalStory[]> {
 
 // Chat API — only works when running locally (Vite dev/preview server)
 
-export async function checkChatAvailable(): Promise<boolean> {
+export async function checkChatAvailable(): Promise<{ available: boolean; model: string | null }> {
   try {
     const res = await fetch('/local-stories/_chat/available');
-    if (!res.ok) return false;
+    if (!res.ok) return { available: false, model: null };
     const data = await res.json();
-    return data.available === true;
+    return {
+      available: data.available === true,
+      model: typeof data.model === 'string' ? data.model : null,
+    };
   } catch {
-    return false;
+    return { available: false, model: null };
   }
 }
 
@@ -153,4 +156,3 @@ function validateStory(data: unknown): asserts data is Story {
     }
   }
 }
-

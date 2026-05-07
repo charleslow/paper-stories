@@ -40,6 +40,30 @@ Options:
 - `-q, --query <query>` — Focus the story on a specific aspect
 - `-c, --cache-repo <path>` — Publish directly to code-stories-cache repo
 - `-s, --slug <slug>` — Custom story slug
+- `--models <overrides>` — Override stage models, e.g. `exploration=gpt-5.4,explanations=claude-sonnet-4-6`
+
+### Configure models
+
+The CLI includes packaged defaults in `packages/cli/config.yaml`:
+
+```yaml
+models:
+  exploration: claude-sonnet-4-6
+  outline: claude-sonnet-4-6
+  excerpts: claude-sonnet-4-6
+  verification: claude-sonnet-4-6
+  explanations: claude-sonnet-4-6
+  assemble: claude-sonnet-4-6
+  chat: gpt-5.4
+```
+
+Generation is now run as six configured subprocess stages. Models whose names
+start with `claude-` run through Claude Code; all other model names run through
+Codex. Override models for one generation with:
+
+```bash
+node index.js generate 1706.03762 --models exploration=gpt-5.4,explanations=claude-sonnet-4-6
+```
 
 ### View stories
 
