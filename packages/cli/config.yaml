@@ -5,10 +5,10 @@
 # model names run through Codex.
 
 models:
-  exploration: claude-sonnet-4-6
-  outline: claude-sonnet-4-6
-  excerpts: claude-sonnet-4-6
-  verification: claude-sonnet-4-6
-  explanations: claude-sonnet-4-6
-  assemble: claude-sonnet-4-6
+  exploration: gpt-5.4
+  outline: gpt-5.4
+  excerpts: gpt-5.4
+  verification: gpt-5.4
+  explanations: claude-opus-4-7
+  assemble: gpt-5.4
   chat: gpt-5.4
