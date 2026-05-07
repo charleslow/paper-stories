@@ -1,0 +1,14 @@
+# config.yaml - packaged default model choices for paper-stories
+#
+# Users can override these defaults with --models stage=model,stage=model.
+# Models whose names start with "claude-" run through Claude Code; all other
+# model names run through Codex.
+
+models:
+  exploration: gpt-5.4
+  outline: claude-sonnet-4-6
+  excerpts: claude-sonnet-4-6
+  verification: gpt-5.4
+  explanations: claude-opus-4-6
+  assemble: gpt-5.4
+  chat: gpt-5.4

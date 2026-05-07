@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Story, Theme } from './types';
-import { parseStoryUrl, fetchStory, resolvePdfUrl, checkChatAvailable } from './api';
+import { parseStoryUrl, fetchStory, resolvePdfUrl, checkChatAvailable, providerFromModel } from './api';
 import Sidebar from './components/Sidebar';
 import ChapterDisplay from './components/ChapterDisplay';
 import LandingPage from './components/LandingPage';
@@ -10,7 +10,7 @@ type AppState =
   | { status: 'landing' }
   | { status: 'loading'; url: string }
   | { status: 'error'; message: string }
-  | { status: 'ready'; story: Story; currentChapter: number; pdfUrl: string | null; chatAvailable: boolean };
+  | { status: 'ready'; story: Story; currentChapter: number; pdfUrl: string | null; chatAvailable: boolean; chatProvider: string | null };
 
 function useTheme() {
   const [theme, setTheme] = useState<Theme>(() => {
@@ -44,8 +44,11 @@ export default function App() {
     if (storyUrl) {
       setState({ status: 'loading', url: storyUrl });
       Promise.all([fetchStory(storyUrl), resolvePdfUrl(storyUrl), checkChatAvailable()])
-        .then(([story, pdfUrl, chatAvailable]) => {
-          setState({ status: 'ready', story, currentChapter: 0, pdfUrl, chatAvailable });
+        .then(([story, pdfUrl, chat]) => {
+          // Per-story chatModel (written at generation time) takes precedence over
+          // the server's startup config so the label always matches the backend route.
+          const chatProvider = providerFromModel(story.chatModel) ?? chat.provider;
+          setState({ status: 'ready', story, currentChapter: 0, pdfUrl, chatAvailable: chat.available, chatProvider });
 
         })
         .catch(err => {
@@ -119,7 +122,7 @@ export default function App() {
     );
   }
 
-  const { story, currentChapter, pdfUrl, chatAvailable } = state;
+  const { story, currentChapter, pdfUrl, chatAvailable, chatProvider } = state;
   const chapter = story.chapters[currentChapter];
 
   return (
@@ -141,6 +144,7 @@ export default function App() {
         onNavigate={navigateChapter}
         pdfUrl={pdfUrl ?? undefined}
         chatAvailable={chatAvailable}
+        chatProvider={chatProvider}
         storyId={story.id}
         storyMeta={{
           title: story.title,

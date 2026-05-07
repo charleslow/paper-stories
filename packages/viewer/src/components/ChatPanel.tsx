@@ -8,12 +8,24 @@ import { sendChatMessage, fetchChatHistory } from '../api';
 interface ChatPanelProps {
   storyId: string;
   chapterId: string;
+  chatProvider?: string | null;
+}
+
+const PROVIDER_LABELS: Record<string, string> = {
+  claude: 'Claude',
+  codex: 'Codex',
+};
+
+function assistantLabel(provider?: string | null): string {
+  return (provider && PROVIDER_LABELS[provider]) ?? 'Assistant';
 }
 
 export default function ChatPanel({
   storyId,
   chapterId,
+  chatProvider,
 }: ChatPanelProps) {
+  const modelLabel = assistantLabel(chatProvider);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -112,12 +124,12 @@ export default function ChatPanel({
       <div className="chat-messages">
         {messages.length === 0 && !loading && (
           <div className="chat-empty">
-            Ask a question about this chapter. Claude has context on the current, previous, and next chapters, plus the paper overview.
+            Ask a question about this chapter. {modelLabel} has context on the current, previous, and next chapters, plus the paper overview.
           </div>
         )}
         {messages.map((msg, i) => (
           <div key={i} className={`chat-message chat-message-${msg.role}`}>
-            <div className="chat-message-role">{msg.role === 'user' ? 'You' : 'Claude'}</div>
+            <div className="chat-message-role">{msg.role === 'user' ? 'You' : modelLabel}</div>
             <div className="chat-message-content">
               <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
                 {msg.content}
@@ -127,7 +139,7 @@ export default function ChatPanel({
         ))}
         {loading && (
           <div className="chat-message chat-message-assistant">
-            <div className="chat-message-role">Claude</div>
+            <div className="chat-message-role">{modelLabel}</div>
             <div className="chat-message-content chat-thinking">Thinking...</div>
           </div>
         )}

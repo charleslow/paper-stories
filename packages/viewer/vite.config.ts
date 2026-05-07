@@ -3,9 +3,45 @@ import { defineConfig, type Connect } from 'vite'
 import react from '@vitejs/plugin-react'
 import path from 'path'
 import fs from 'fs/promises'
-import { spawn } from 'child_process'
+import { readFileSync } from 'fs'
+import { spawn, spawnSync } from 'child_process'
 import type { ServerResponse } from 'http'
 import { isSafeId, readBody, buildChatPrompt, withFileLock } from './chat-utils'
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+import yaml from 'js-yaml'
+
+function loadChatModel(): string | null {
+  const configPaths = [
+    path.resolve(__dirname, '../cli/config.yaml'),
+    path.resolve(__dirname, '../../config.yaml'),
+  ]
+  for (const configPath of configPaths) {
+    try {
+      const raw = readFileSync(configPath, 'utf-8')
+      const parsed = yaml.load(raw) as { models?: Record<string, string> }
+      const chat = parsed?.models?.chat
+      if (typeof chat === 'string' && chat) return chat
+    } catch {
+      // Try the next config path.
+    }
+  }
+  return null
+}
+
+/** Maps a model string to the provider binary that runs it. */
+function chatProvider(model: string | null | undefined): 'claude' | 'codex' | null {
+  if (model?.startsWith('claude-')) return 'claude'
+  if (model) return 'codex'
+  return null
+}
+
+function isBinaryAvailable(binary: string): boolean {
+  return spawnSync('which', [binary], { stdio: 'ignore' }).status === 0
+}
+
+const chatModel = loadChatModel()
+const globalProvider = chatProvider(chatModel)
+const chatBinaryAvailable = globalProvider !== null && isBinaryAvailable(globalProvider)
 
 // Shared middleware for serving local stories (works in both dev and preview)
 function localStoriesMiddleware(req: Connect.IncomingMessage, res: ServerResponse, next: Connect.NextFunction) {
@@ -19,7 +55,7 @@ function jsonResponse(res: ServerResponse, data: unknown, status = 200) {
   res.end(JSON.stringify(data))
 }
 
-function runClaude(prompt: string, storiesDir: string): Promise<string> {
+function runCodex(prompt: string, storiesDir: string, model?: string | null): Promise<string> {
   return new Promise((resolve, reject) => {
     let settled = false
     const done = (err: Error | null, result?: string) => {
@@ -30,7 +66,73 @@ function runClaude(prompt: string, storiesDir: string): Promise<string> {
       else resolve(result!)
     }
 
-    const proc = spawn('claude', ['-p', '--allowedTools', 'Read', '--add-dir', storiesDir], {
+    const args = ['exec']
+    if (model) args.push('--model', model)
+    args.push('--full-auto', '-')
+
+    const proc = spawn('codex', args, {
+      stdio: ['pipe', 'pipe', 'pipe'],
+      cwd: storiesDir,
+    })
+    console.log('[chat] codex process pid:', proc.pid)
+
+    const maxBuffer = 1024 * 1024
+    let stdout = ''
+    let stderr = ''
+
+    const timer = setTimeout(() => {
+      proc.kill('SIGTERM')
+      done(new Error('Codex timed out after 120 seconds'))
+    }, 120000)
+
+    proc.stdout.on('data', (data: Buffer) => {
+      stdout += data.toString()
+      if (stdout.length > maxBuffer) {
+        proc.kill('SIGTERM')
+        done(new Error('Codex output exceeded max buffer size'))
+      }
+    })
+
+    proc.stderr.on('data', (data: Buffer) => {
+      if (stderr.length < maxBuffer) stderr += data.toString()
+    })
+
+    proc.on('close', (code) => {
+      if (code === 0) {
+        console.log('[chat] codex responded, length:', stdout.length)
+        done(null, stdout.trim())
+      } else {
+        console.error('[chat] codex spawn error:', { code, stderr })
+        done(new Error(stderr || `Codex exited with code ${code}`))
+      }
+    })
+
+    proc.on('error', (err) => {
+      console.error('[chat] codex spawn error:', err.message)
+      done(new Error(err.message))
+    })
+
+    proc.stdin.on('error', () => { /* process died before prompt was fully written; close handler will settle */ })
+    proc.stdin.write(prompt)
+    proc.stdin.end()
+  })
+}
+
+function runClaude(prompt: string, storiesDir: string, model?: string | null): Promise<string> {
+  return new Promise((resolve, reject) => {
+    let settled = false
+    const done = (err: Error | null, result?: string) => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      if (err) reject(err)
+      else resolve(result!)
+    }
+
+    const args = ['-p', '--allowedTools', 'Read', '--add-dir', storiesDir]
+    if (model) args.push('--model', model)
+
+    const proc = spawn('claude', args, {
       stdio: ['pipe', 'pipe', 'pipe'],
     })
     console.log('[chat] claude process pid:', proc.pid)
@@ -79,7 +181,15 @@ function runClaude(prompt: string, storiesDir: string): Promise<string> {
   })
 }
 
-// Limit concurrent Claude processes
+function runChat(prompt: string, storiesDir: string, storyModel?: string | null): Promise<string> {
+  const model = storyModel ?? chatModel
+  if (chatProvider(model) === 'claude') {
+    return runClaude(prompt, storiesDir, model)
+  }
+  return runCodex(prompt, storiesDir, model)
+}
+
+// Limit concurrent chat processes
 let activeChatRequests = 0
 const MAX_CONCURRENT_CHATS = 2
 
@@ -131,6 +241,7 @@ async function readStoryFile(storiesDir: string, storyId: string) {
   return { filename, data: data as {
     title: string
     arxivId: string
+    chatModel?: string | null
     chapters: { id: string; label: string; excerpts: { latexSource: string; type: string }[]; explanation: string }[]
   }}
 }
@@ -138,7 +249,7 @@ async function readStoryFile(storiesDir: string, storyId: string) {
 async function handleRequest(req: Connect.IncomingMessage, res: ServerResponse, next: Connect.NextFunction, storiesDir: string) {
   // Chat availability check
   if (req.url === '/_chat/available') {
-    return jsonResponse(res, { available: true })
+    return jsonResponse(res, { available: chatBinaryAvailable, model: chatModel ?? null, provider: globalProvider })
   }
 
   // Chat history: GET /_chat/:storyId
@@ -201,32 +312,33 @@ async function handleRequest(req: Connect.IncomingMessage, res: ServerResponse, 
         ? { label: firstChapter.label, explanation: firstChapter.explanation }
         : null
 
-      // Use file lock to prevent concurrent writes to the same chat file
-      const reply = await withFileLock(chatPath, async () => {
+      const chatDataForPrompt = await readChatFile(chatPath, storyId)
+      const history = chatDataForPrompt.chapters[chapterId] || []
+
+      const storyFile = path.join(storiesDir, `${filename}.json`)
+      const pdfCandidate = path.join(storiesDir, `${filename}.pdf`)
+      let pdfFile: string | null = null
+      try { await fs.access(pdfCandidate); pdfFile = pdfCandidate } catch {}
+
+      const prompt = buildChatPrompt({
+        message: body.message,
+        title: story.title,
+        arxivId: story.arxivId,
+        currentChapter,
+        prevChapter,
+        nextChapter,
+        overviewChapter,
+        totalChapters: story.chapters.length,
+        history,
+        storyFile,
+        pdfFile,
+      })
+
+      const aiReply = await runChat(prompt, storiesDir, story.chatModel)
+
+      // Use file lock to prevent concurrent writes to the same chat file.
+      await withFileLock(chatPath, async () => {
         const chatData = await readChatFile(chatPath, storyId)
-        const history = chatData.chapters[chapterId] || []
-
-        const storyFile = path.join(storiesDir, `${filename}.json`)
-        const pdfCandidate = path.join(storiesDir, `${filename}.pdf`)
-        let pdfFile: string | null = null
-        try { await fs.access(pdfCandidate); pdfFile = pdfCandidate } catch {}
-
-        const prompt = buildChatPrompt({
-          message: body.message,
-          title: story.title,
-          arxivId: story.arxivId,
-          currentChapter,
-          prevChapter,
-          nextChapter,
-          overviewChapter,
-          totalChapters: story.chapters.length,
-          history,
-          storyFile,
-          pdfFile,
-        })
-
-        const aiReply = await runClaude(prompt, storiesDir)
-
         const now = new Date().toISOString()
         if (!chatData.chapters[chapterId]) {
           chatData.chapters[chapterId] = []
@@ -240,11 +352,9 @@ async function handleRequest(req: Connect.IncomingMessage, res: ServerResponse, 
         const tmpPath = chatPath + '.tmp'
         await fs.writeFile(tmpPath, JSON.stringify(chatData, null, 2))
         await fs.rename(tmpPath, chatPath)
-
-        return aiReply
       })
 
-      return jsonResponse(res, { reply })
+      return jsonResponse(res, { reply: aiReply })
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Chat failed'
       return jsonResponse(res, { error: message }, 500)
