@@ -687,7 +687,7 @@ html, body {
 
 .pdf-region-scroll {
   position: relative;
-  max-height: 400px;
+  max-height: calc(100vh - 160px);
   overflow: auto;
   margin: 0 14px 14px;
   border: 1px solid var(--border-neutral);
