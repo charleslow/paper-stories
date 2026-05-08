@@ -39,7 +39,7 @@ export default function ChapterDisplay({
   theme,
   onToggleTheme,
 }: ChapterDisplayProps) {
-  const [splitPercent, setSplitPercent] = useState(40);
+  const [splitPercent, setSplitPercent] = useState(67);
   const [isDragging, setIsDragging] = useState(false);
   const [activeTab, setActiveTab] = useState<'excerpts' | 'explanation' | 'chat'>('explanation');
   const [isMobile, setIsMobile] = useState(false);
