@@ -43,6 +43,7 @@ Use this to assign \`pdfRegion\` fields to excerpts (see Stage 3 for details).`
   "arxivUrl": null,
   "sourceType": "local",`;
 
+
   return `You are a Paper Stories generator. Your job is to create a deep, technically rigorous walkthrough
 of the source material, structured as an interactive story.
 
@@ -106,6 +107,10 @@ Execute these stages in order, writing checkpoint files after each:
 - ${hasPdf && hasSource ? 'Read the PDF for overview context' : ''}
 - Map the structure: sections, key equations, theorems, algorithms, tables, figures
 - **Determine the source type** (research paper vs. textbook chapter vs. other) and note this in your exploration file — this will guide your approach for the rest of the pipeline
+- **Extract paper metadata** from the title page, abstract, or author block:
+  - Authors: full names as they appear in the paper
+  - Publication date: month and year (check submission date, conference proceedings, journal volume, or arXiv date)
+  - Institutions/affiliations: for each author if listed (deduplicate)
 - Write findings to ${generationDir}/exploration.md
 - End the file with the line: EXPLORATION_COMPLETE
 
@@ -211,6 +216,10 @@ Assemble everything into a single story.json file.
   "id": "<generated-uuid>",
   "title": "<Title — concise, may be shortened>",
   ${schemaFields}
+  "authors": ["<Author One>", "<Author Two>"],
+  "publishedYear": <year as integer, e.g. 2024>,
+  "publishedMonth": <month as integer 1-12, e.g. 9 for September>,
+  "institutions": ["<Institution One>", "<Institution Two>"],
   "query": ${JSON.stringify(query || null)},
   "createdAt": "<ISO-8601 timestamp>",
   "chapters": [
@@ -236,6 +245,9 @@ Assemble everything into a single story.json file.
 **Validation before writing:**
 1. Every excerpt.latexSource exists ${hasSource ? 'verbatim in the source files' : 'faithfully in the PDF'}
 2. Every excerpt has a non-empty latexSource field
+2a. authors is an array of strings (or null if genuinely undetectable)
+2b. publishedYear and publishedMonth are integers (or null if genuinely undetectable)
+2c. institutions is an array of unique institution strings (or null if none listed)
 3. First chapter (Overview) and last chapter (Summary) have \`excerpts: []\`
 4. All other chapters have at least 1 excerpt
 5. Chapter labels are 2-4 words

@@ -150,6 +150,10 @@ export default function App() {
           title: story.title,
           arxivId: story.arxivId,
           arxivUrl: story.arxivUrl,
+          authors: story.authors ?? null,
+          publishedYear: story.publishedYear ?? null,
+          publishedMonth: story.publishedMonth ?? null,
+          institutions: story.institutions ?? null,
           query: story.query,
         }}
         theme={theme}

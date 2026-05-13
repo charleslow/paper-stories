@@ -24,6 +24,10 @@ export interface Story {
   title: string;
   arxivId: string | null;
   arxivUrl: string | null;
+  authors: string[] | null;
+  publishedYear: number | null;
+  publishedMonth: number | null;
+  institutions: string[] | null;
   query: string | null;
   createdAt: string;
   chapters: Chapter[];

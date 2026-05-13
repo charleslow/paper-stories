@@ -499,6 +499,25 @@ html, body {
   font-weight: 600;
 }
 
+.meta-authors {
+  font-size: 0.875rem;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+
+.meta-published {
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+}
+
+.meta-institutions {
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+  font-style: italic;
+  margin-bottom: 10px;
+}
+
 .meta-arxiv {
   color: var(--accent-strong);
   text-decoration: none;
