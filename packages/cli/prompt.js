@@ -190,7 +190,8 @@ End the file with: VERIFICATION_COMPLETE
 ### Stage 5: Explanation Writing
 Write the explanation markdown for each chapter:
 
-- **Structure**: Start with WHY this concept matters, then WHAT it is, then HOW it works, then what to WATCH OUT for
+- **Structure**: Cover WHY this concept matters, WHAT it is, HOW it works, and what to WATCH OUT for — but weave these together as natural prose, not as labeled sections or mechanical topic sentences
+- **No mechanical openers**: Never start a chapter with phrases like "This chapter matters because..." or "This section is important because...". Instead, open with a compelling observation, a question, an analogy, or a concrete consequence that draws the reader in and implicitly conveys why the topic matters. The motivation should be felt, not announced.
 - **Intuition first**: Always ground formal definitions in intuition before or alongside the formalism
 - **Math**: Use KaTeX-compatible LaTeX in explanations (inline: $...$ , display: $$...$$)
 - **Cross-references**: Connect chapters ("As we saw in Chapter 3..." or "This connects to the loss function in the next chapter")
