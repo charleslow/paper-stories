@@ -13,6 +13,10 @@ interface ExcerptPanelProps {
     title: string;
     arxivId: string | null;
     arxivUrl: string | null;
+    authors: string[] | null;
+    publishedYear: number | null;
+    publishedMonth: number | null;
+    institutions: string[] | null;
     query: string | null;
   };
 }
@@ -26,6 +30,19 @@ export default function ExcerptPanel({ excerpts, pdfUrl, storyMeta }: ExcerptPan
           <div className="story-meta">
             <div className="meta-icon">📄</div>
             <h2>{storyMeta.title}</h2>
+            {storyMeta.authors && storyMeta.authors.length > 0 && (
+              <div className="meta-authors">{storyMeta.authors.join(', ')}</div>
+            )}
+            {(storyMeta.publishedYear || storyMeta.publishedMonth) && (
+              <div className="meta-published">
+                {storyMeta.publishedMonth && storyMeta.publishedYear
+                  ? `${new Date(storyMeta.publishedYear, storyMeta.publishedMonth - 1).toLocaleString('en-US', { month: 'long' })} ${storyMeta.publishedYear}`
+                  : storyMeta.publishedYear ?? ''}
+              </div>
+            )}
+            {storyMeta.institutions && storyMeta.institutions.length > 0 && (
+              <div className="meta-institutions">{storyMeta.institutions.join(' · ')}</div>
+            )}
             {storyMeta.arxivUrl && storyMeta.arxivId && (
               <a
                 href={storyMeta.arxivUrl}

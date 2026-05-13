@@ -3,6 +3,10 @@
   "title": "LLM-JEPA: Large Language Models Meet Joint Embedding Predictive Architectures",
   "arxivId": "2509.14252",
   "arxivUrl": "https://arxiv.org/abs/2509.14252",
+  "authors": ["Hai Huang", "Yann LeCun", "Randall Balestriero"],
+  "publishedYear": 2025,
+  "publishedMonth": 9,
+  "institutions": ["New York University", "Meta AI"],
   "query": null,
   "createdAt": "2026-03-11T12:00:00.000Z",
   "chapters": [
