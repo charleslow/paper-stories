@@ -55,6 +55,7 @@ describe('ExcerptPanel', () => {
     render(<ExcerptPanel excerpts={[]} storyMeta={{
       title: 'Test Paper', arxivId: '2401.12345',
       arxivUrl: 'https://arxiv.org/abs/2401.12345', query: null,
+      authors: null, publishedYear: null, publishedMonth: null, institutions: null,
     }} />);
     expect(screen.getByText('Test Paper')).toBeInTheDocument();
   });
