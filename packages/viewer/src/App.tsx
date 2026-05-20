@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Story, Theme } from './types';
 import { parseStoryUrl, fetchStory, resolvePdfUrl, checkChatAvailable, providerFromModel } from './api';
+import { recordStoryView } from './storyCache';
 import Sidebar from './components/Sidebar';
 import ChapterDisplay from './components/ChapterDisplay';
 import LandingPage from './components/LandingPage';
@@ -49,7 +50,7 @@ export default function App() {
           // the server's startup config so the label always matches the backend route.
           const chatProvider = providerFromModel(story.chatModel) ?? chat.provider;
           setState({ status: 'ready', story, currentChapter: 0, pdfUrl, chatAvailable: chat.available, chatProvider });
-
+          recordStoryView(storyUrl, story);
         })
         .catch(err => {
           setState({ status: 'error', message: err.message });
