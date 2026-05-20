@@ -82,8 +82,7 @@ async function networkFirst(cacheName, request) {
     if (cached) return cached;
     // For navigation requests fall back to the cached root so the app shell loads
     if (request.mode === 'navigate') {
-      const appCache = await caches.open(APP_CACHE);
-      const shell = await appCache.match(new Request('/'));
+      const shell = await cache.match(new Request('/'));
       if (shell) return shell;
     }
     return new Response('Offline – content not cached', {

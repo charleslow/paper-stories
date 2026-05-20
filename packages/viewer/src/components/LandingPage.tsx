@@ -8,7 +8,9 @@ export default function LandingPage({ theme, onToggleTheme }: { theme: Theme; on
   const [input, setInput] = useState('');
   const [localStories, setLocalStories] = useState<LocalStory[]>([]);
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
-  const [recentStories, setRecentStories] = useState<RecentStory[]>([]);
+  const [recentStories, setRecentStories] = useState<RecentStory[]>(() =>
+    !navigator.onLine ? getRecentStories() : [],
+  );
 
   useEffect(() => {
     fetchLocalStories().then(setLocalStories);
@@ -22,7 +24,6 @@ export default function LandingPage({ theme, onToggleTheme }: { theme: Theme; on
     };
     window.addEventListener('online', goOnline);
     window.addEventListener('offline', goOffline);
-    if (!navigator.onLine) setRecentStories(getRecentStories());
     return () => {
       window.removeEventListener('online', goOnline);
       window.removeEventListener('offline', goOffline);
