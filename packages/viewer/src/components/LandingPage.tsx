@@ -1,14 +1,33 @@
 import { useState, useEffect } from 'react';
 import { Theme } from '../types';
 import { fetchLocalStories, type LocalStory } from '../api';
+import { getRecentStories, type RecentStory } from '../storyCache';
 import ThemeToggle from './ThemeToggle';
 
 export default function LandingPage({ theme, onToggleTheme }: { theme: Theme; onToggleTheme: () => void }) {
   const [input, setInput] = useState('');
   const [localStories, setLocalStories] = useState<LocalStory[]>([]);
+  const [isOffline, setIsOffline] = useState(!navigator.onLine);
+  const [recentStories, setRecentStories] = useState<RecentStory[]>(() =>
+    !navigator.onLine ? getRecentStories() : [],
+  );
 
   useEffect(() => {
     fetchLocalStories().then(setLocalStories);
+  }, []);
+
+  useEffect(() => {
+    const goOnline = () => setIsOffline(false);
+    const goOffline = () => {
+      setIsOffline(true);
+      setRecentStories(getRecentStories());
+    };
+    window.addEventListener('online', goOnline);
+    window.addEventListener('offline', goOffline);
+    return () => {
+      window.removeEventListener('online', goOnline);
+      window.removeEventListener('offline', goOffline);
+    };
   }, []);
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -45,6 +64,12 @@ export default function LandingPage({ theme, onToggleTheme }: { theme: Theme; on
         <p className="landing-subtitle">
           Interactive deep-dives into ML research papers
         </p>
+
+        {isOffline && (
+          <div className="offline-banner">
+            You're offline. Recently viewed stories are available below.
+          </div>
+        )}
 
         <form className="landing-form" onSubmit={handleSubmit}>
           <input
@@ -87,7 +112,24 @@ export default function LandingPage({ theme, onToggleTheme }: { theme: Theme; on
           </div>
         )}
 
-
+        {isOffline && recentStories.length > 0 && (
+          <div className="landing-recent">
+            <h3>Recently Viewed</h3>
+            <ul>
+              {recentStories.map((story) => (
+                <li key={story.url}>
+                  <a href={`?url=${encodeURIComponent(story.url)}`}>
+                    {story.title}
+                    {story.arxivId && <span className="recent-arxiv"> ({story.arxivId})</span>}
+                  </a>
+                  <span className="recent-date">
+                    {new Date(story.cachedAt).toLocaleDateString()}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </div>
     </div>
   );

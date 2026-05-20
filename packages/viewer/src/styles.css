@@ -1072,6 +1072,17 @@ html, body {
   font-family: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
 }
 
+.offline-banner {
+  margin-bottom: 16px;
+  padding: 10px 14px;
+  border-radius: var(--radius-secondary);
+  background: var(--accent-surface);
+  border: 1px solid var(--accent-border);
+  color: var(--accent-muted);
+  font-size: 0.8rem;
+  text-align: center;
+}
+
 .landing-recent {
   margin-top: 24px;
 }
