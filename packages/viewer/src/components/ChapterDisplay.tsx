@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { Chapter, Theme } from '../types';
 import ExcerptPanel from './ExcerptPanel';
 import ExplanationPanel from './ExplanationPanel';
@@ -47,6 +47,13 @@ export default function ChapterDisplay({
   const [isDragging, setIsDragging] = useState(false);
   const [activeTab, setActiveTab] = useState<'excerpts' | 'explanation' | 'chat'>('explanation');
   const [isMobile, setIsMobile] = useState(false);
+  const rightScrollRef = useRef<HTMLDivElement>(null);
+  const mobileScrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    rightScrollRef.current?.scrollTo({ top: 0 });
+    mobileScrollRef.current?.scrollTo({ top: 0 });
+  }, [chapterIndex]);
 
   // Detect mobile
   useEffect(() => {
@@ -143,7 +150,7 @@ export default function ChapterDisplay({
       )}
 
       {isMobile ? (
-        <div className="chapter-panels-mobile">
+        <div className="chapter-panels-mobile" ref={mobileScrollRef}>
           {activeTab === 'excerpts' ? (
             <ExcerptPanel excerpts={chapter.excerpts} pdfUrl={pdfUrl} storyMeta={storyMeta} />
           ) : activeTab === 'chat' && chatAvailable ? (
@@ -168,7 +175,7 @@ export default function ChapterDisplay({
             onMouseDown={handleMouseDown}
           />
           <div className="panel-right" style={{ width: `${100 - splitPercent}%` }}>
-            <div className="panel-right-scroll">
+            <div className="panel-right-scroll" ref={rightScrollRef}>
               <ExplanationPanel explanation={chapter.explanation} />
               {chatAvailable && (
                 <ChatPanel
