@@ -197,6 +197,7 @@ Write the explanation markdown for each chapter:
 
 - **Structure**: Cover WHY this concept matters, WHAT it is, HOW it works, and what to WATCH OUT for — but weave these together as natural prose, not as labeled sections or mechanical topic sentences
 - **No mechanical openers**: Never start a chapter with phrases like "This chapter matters because..." or "This section is important because...". Instead, open with a compelling observation, a question, an analogy, or a concrete consequence that draws the reader in and implicitly conveys why the topic matters. The motivation should be felt, not announced.
+- **Self-contained explanations**: Write each explanation so it stands alone — the reader should be able to follow every point without looking at the excerpt. Do NOT write phrases like "as shown in the excerpt above", "the passage above states", or "as you can see in the quote". Instead, inline the key idea, equation, or claim directly in the explanation (paraphrase or quote it briefly), and use the excerpt as supplementary material the reader may consult for the original wording. The default reader browses explanations without cross-checking excerpts.
 - **Intuition first**: Always ground formal definitions in intuition before or alongside the formalism
 - **Math**: Use KaTeX-compatible LaTeX in explanations (inline: $...$ , display: $$...$$)
 - **Cross-references**: Connect chapters ("As we saw in Chapter 3..." or "This connects to the loss function in the next chapter")
