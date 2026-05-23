@@ -1422,4 +1422,16 @@ html, body {
   .explanation-panel {
     padding: 1.5rem 1rem;
   }
+
+  .explanation-content {
+    font-size: 1.0625rem;
+  }
+
+  .excerpt-text {
+    font-size: 1rem;
+  }
+
+  .chat-message-content {
+    font-size: 1rem;
+  }
 }
