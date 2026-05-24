@@ -3,12 +3,13 @@
 /**
  * Paper Stories CLI
  *
- * Generates interactive walkthrough stories from arXiv papers or local PDFs (textbooks, etc.).
+ * Generates interactive walkthrough stories from arXiv papers, local PDFs, or webpages.
  *
  * Usage:
  *   paper-stories generate <arxiv-url> [--query "..."] [--output-dir ./out]
  *   paper-stories generate 2401.12345 --query "attention mechanism"
  *   paper-stories generate --pdf ./ch4.pdf
+ *   paper-stories generate --webpage https://example.com/article
  */
 
 import { Command } from 'commander';
@@ -21,6 +22,7 @@ import ora from 'ora';
 import { loadDefaultConfig, mergeConfigs, parseModelOverrides } from './config.js';
 import { parseArxivId, downloadLatexSource, downloadPdf } from './arxiv.js';
 import { prepareLocalPdf } from './local.js';
+import { prepareWebpage } from './webpage.js';
 import { emptySourceResult } from './source-utils.js';
 import { buildPrompt } from './prompt.js';
 import { validateStory } from './validate.js';
@@ -32,18 +34,19 @@ const program = new Command();
 
 program
   .name('paper-stories')
-  .description('Generate interactive walkthrough stories from arXiv papers or local PDFs')
+  .description('Generate interactive walkthrough stories from arXiv papers, local PDFs, or webpages')
   .version('0.2.0');
 
 program
   .command('generate')
-  .description('Generate a story from an arXiv paper or local PDF')
-  .argument('[arxiv]', 'arXiv URL or paper ID (e.g., 2401.12345). Omit when using --pdf.')
+  .description('Generate a story from an arXiv paper, local PDF, or webpage')
+  .argument('[arxiv]', 'arXiv URL or paper ID (e.g., 2401.12345). Omit when using --pdf or --webpage.')
   .option('-q, --query <query>', 'Optional focus query for the story')
   .option('-o, --output-dir <dir>', 'Output directory', '.')
   .option('-c, --cache-repo <path>', 'Path to code-stories-cache repo for direct publishing')
   .option('-s, --slug <slug>', 'Story slug for the output filename')
   .option('--pdf <path>', 'Path to local PDF file (for textbooks, chapters, or any non-arXiv source)')
+  .option('--webpage <url>', 'URL of an HTML webpage, article, or blog post to turn into a story')
   .option('--models <overrides>', 'Override stage models, e.g. exploration=gpt-5.4,explanations=claude-sonnet-4-6')
   .action(async (arxiv, options) => {
     try {
@@ -51,17 +54,16 @@ program
         loadDefaultConfig(),
         parseModelOverrides(options.models),
       );
-      if (options.pdf && arxiv) {
-        console.error('✗ Error: --pdf and an arXiv URL/ID are mutually exclusive. Use one or the other.');
+      const inputModes = [Boolean(arxiv), Boolean(options.pdf), Boolean(options.webpage)].filter(Boolean).length;
+      if (inputModes !== 1) {
+        console.error('✗ Error: provide exactly one input: an arXiv URL/ID, --pdf <path>, or --webpage <url>.');
         process.exit(1);
       }
       if (options.pdf) {
         await generateLocalStory(options);
+      } else if (options.webpage) {
+        await generateWebpageStory(options);
       } else {
-        if (!arxiv) {
-          console.error('✗ Error: provide an arXiv URL/ID or use --pdf <path>');
-          process.exit(1);
-        }
         await generateStory(arxiv, options);
       }
     } catch (err) {
@@ -71,6 +73,49 @@ program
   });
 
 program.parse();
+
+/**
+ * Generate a story from a webpage.
+ */
+async function generateWebpageStory(options) {
+  const generationId = uuidv4();
+
+  console.log(`\n🌐 Paper Stories Generator (webpage)`);
+  console.log(`   URL: ${options.webpage}`);
+  console.log(`   Query: ${options.query || '(comprehensive deep-dive)'}`);
+  console.log(`   Generation ID: ${generationId}\n`);
+
+  const workDir = join(resolve(options.outputDir), '.paper-stories-tmp', generationId);
+  const generationDir = join(workDir, 'generation');
+  mkdirSync(generationDir, { recursive: true });
+
+  console.log('📥 Fetching webpage source...');
+  const { sourceResult, metadata } = await prepareWebpage(options.webpage, workDir);
+
+  const prompt = buildPrompt({
+    arxivId: null,
+    arxivUrl: null,
+    query: options.query,
+    sourceDir: sourceResult.sourceDir,
+    pdfPath: null,
+    regionsPath: null,
+    generationDir,
+    title: metadata.title,
+    sourceType: 'webpage',
+    sourceUrl: metadata.url,
+  });
+
+  await runGenerationPipeline({
+    prompt,
+    generationDir,
+    workDir,
+    sourceResult,
+    pdfPath: null,
+    options,
+    sourceType: 'webpage',
+    sourceUrl: metadata.url,
+  });
+}
 
 /**
  * Generate a story from a local PDF (textbook chapter, etc.)
@@ -122,6 +167,8 @@ async function generateLocalStory(options) {
     regionsPath,
     generationDir,
     title: null,
+    sourceType: 'local',
+    sourceUrl: null,
   });
 
   // Run the shared generation pipeline
@@ -132,6 +179,8 @@ async function generateLocalStory(options) {
     sourceResult,
     pdfPath,
     options,
+    sourceType: 'local',
+    sourceUrl: null,
   });
 }
 
@@ -193,6 +242,8 @@ async function generateStory(arxivInput, options) {
     regionsPath,
     generationDir,
     title: null,
+    sourceType: 'arxiv',
+    sourceUrl: arxivUrl,
   });
 
   // Run the shared generation pipeline
@@ -203,13 +254,15 @@ async function generateStory(arxivInput, options) {
     sourceResult,
     pdfPath,
     options,
+    sourceType: 'arxiv',
+    sourceUrl: arxivUrl,
   });
 }
 
 /**
  * Shared generation pipeline: prompt stages → configured agents → validate → save.
  */
-async function runGenerationPipeline({ prompt, generationDir, workDir, sourceResult, pdfPath, options }) {
+async function runGenerationPipeline({ prompt, generationDir, workDir, sourceResult, pdfPath, options, sourceType, sourceUrl }) {
   // Write prompt for debugging
   writeFileSync(join(generationDir, '_prompt.md'), prompt);
 
@@ -306,6 +359,8 @@ async function runGenerationPipeline({ prompt, generationDir, workDir, sourceRes
   // Record which chat model this story was built with so the viewer can use
   // the same model for routing and labeling regardless of startup config.
   story.chatModel = options.config.models.chat ?? null;
+  if (sourceType && !story.sourceType) story.sourceType = sourceType;
+  if (sourceUrl && !story.sourceUrl) story.sourceUrl = sourceUrl;
 
   spinner.succeed(`Story generated: "${story.title}" (${story.chapters.length} chapters)`);
 

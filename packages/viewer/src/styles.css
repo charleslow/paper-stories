@@ -648,6 +648,26 @@ html, body {
   font-size: 1em;
 }
 
+.excerpt-visual {
+  margin: 0;
+  padding: 14px;
+  background: var(--bg-secondary);
+}
+
+.excerpt-visual img {
+  display: block;
+  width: 100%;
+  max-height: 52vh;
+  object-fit: contain;
+  border: 1px solid var(--border-neutral);
+  border-radius: var(--radius-secondary);
+  background: #fff;
+}
+
+.excerpt-visual .excerpt-caption {
+  margin-top: 10px;
+}
+
 /* PDF Region Viewer */
 .pdf-region-viewer {
   border-top: 1px solid var(--border-neutral);

@@ -1,7 +1,7 @@
 /**
  * Paper Stories generation prompt.
  *
- * Sent to Claude to generate a story.json from paper/textbook sources.
+ * Sent to Claude/Codex to generate a story.json from paper/textbook/webpage sources.
  * The prompt enforces source fidelity — all excerpts must be verbatim from the source.
  *
  * Claude adapts its pacing and style based on the source material:
@@ -9,16 +9,40 @@
  * - Textbook chapters → slower pedagogical walkthrough, 30-40 chapters
  */
 
-export function buildPrompt({ arxivId, arxivUrl, query, sourceDir, pdfPath, regionsPath, generationDir, title }) {
+export function buildPrompt({
+  arxivId,
+  arxivUrl,
+  query,
+  sourceDir,
+  pdfPath,
+  regionsPath,
+  generationDir,
+  title,
+  sourceType: providedSourceType,
+  sourceUrl: providedSourceUrl,
+}) {
   const hasSource = !!sourceDir;
   const hasPdf = !!pdfPath;
   const hasRegions = !!regionsPath;
+  const sourceType = providedSourceType || (arxivId ? 'arxiv' : 'local');
+  const sourceUrl = providedSourceUrl || arxivUrl || null;
+  const isWebpage = sourceType === 'webpage';
   // Source identification
-  const sourceIdentification = arxivId
+  const sourceIdentification = isWebpage
+    ? `- Source: Webpage\n- URL: ${sourceUrl}\n- Title: ${title || 'Detect from webpage metadata and content'}`
+    : arxivId
     ? `- arXiv ID: ${arxivId}\n- URL: ${arxivUrl}`
     : `- Source: Local PDF${hasSource ? ' + LaTeX' : ''}\n- Title: Detect from source content (use the document's own title, chapter heading, or create a concise descriptive title)`;
 
-  const sourceInstructions = hasSource
+  const sourceInstructions = isWebpage
+    ? `The fetched webpage source bundle is available at: ${sourceDir}
+Use Read tools to inspect:
+- page.md: readable extracted text, headings, captions, and image candidates
+- page-metadata.json: canonical URL, title, description, author/date if detected, headings, and image URLs
+- page.html: raw HTML fallback for exact source verification
+
+The webpage files are your PRIMARY source of truth.`
+    : hasSource
     ? `The source's LaTeX files are available at: ${sourceDir}
 Use Glob and Read tools to explore and read them. These are your PRIMARY source of truth.`
     : `No LaTeX source is available.`;
@@ -35,8 +59,13 @@ Each block has a \`type\` field: "text" (with a \`text\` field) or "image" (boun
 Use this to assign \`pdfRegion\` fields to excerpts (see Stage 3 for details).`
     : '';
 
-  // Schema: use arxivId/arxivUrl if available, otherwise use title/sourceType
-  const schemaFields = arxivId
+  // Schema: use arxivId/arxivUrl if available, otherwise use source metadata.
+  const schemaFields = isWebpage
+    ? `"arxivId": null,
+  "arxivUrl": null,
+  "sourceType": "webpage",
+  "sourceUrl": "${sourceUrl}",`
+    : arxivId
     ? `"arxivId": "${arxivId}",
   "arxivUrl": "${arxivUrl}",`
     : `"arxivId": null,
@@ -75,6 +104,15 @@ After reading the source in Stage 1, decide how to approach it:
 
 For anything in between (survey papers, tutorial-style papers, technical reports), use your judgment to blend the approaches.
 
+**If the source is a webpage** (blog post, documentation page, explainer, research lab article, or product/engineering post):
+- Tone: Clear technical guide through the page, using the page's own structure and claims as anchors
+- Assume the reader wants the page's ideas unpacked without losing source fidelity
+- Pace: 8-20 chapters depending on density; use fewer chapters for short posts and more for long technical pages
+- Structure: Overview → Context → Main Ideas → Diagrams/Examples → Implications → Caveats → Summary
+- Per-chapter length: 150-300 words, with longer chapters only when the webpage has dense technical arguments
+- Excerpts: 1-3 per chapter (first and last chapters have 0). Use multiple excerpts when pairing prose with a diagram, table, or example.
+- Diagrams/images: Use image candidates from \`page-metadata.json\` when they are central to understanding. For such excerpts, use \`type: "figure"\`, set \`visualUrl\` to the absolute image URL, and set \`content\` to the image caption, alt text, or nearby explanatory sentence.
+
 ## Source
 ${sourceIdentification}
 - User query: ${query || '(none — generate a comprehensive deep-dive)'}
@@ -88,11 +126,17 @@ Write all intermediate and final files to: ${generationDir}
 
 ## CRITICAL RULE: NO HALLUCINATION
 Every excerpt you include MUST be grounded in the source files.
-- The \`latexSource\` field must be copied VERBATIM from the .tex files — character for character
+- The \`latexSource\` field must be copied VERBATIM from the source files — character for character
 - Text excerpts: \`content\` should be the exact quote with minor LaTeX artifacts cleaned (remove \\cite, \\ref, \\label, but KEEP inline math like \`$x$\`)
 - Equation excerpts: \`content\` should be KaTeX-renderable LaTeX, mathematically equivalent to the raw source (you may adapt syntax for KaTeX compatibility)
 - You must NOT invent equations or claims not present in the source
-- Each excerpt MUST include the source file and a \`latexSource\` field showing the raw LaTeX
+- Each excerpt MUST include the source file and a \`latexSource\` field showing the raw source quote
+${isWebpage ? `\nFor webpage stories:
+- Treat \`latexSource\` as the raw source quote from \`page.md\` or \`page.html\`, even though it is not LaTeX
+- Prefer exact passages from \`page.md\` for text excerpts
+- Use \`page-metadata.json\` for canonical URL, author/date hints, headings, and image candidates
+- Use \`visualUrl\` only for image URLs that appear in \`page-metadata.json\`
+- The verification stage must confirm each quote or image URL exists in the fetched source bundle` : ''}
 ${!hasSource ? `\nSince no LaTeX source is available, use the PDF as your primary source:
 - For \`latexSource\`, copy the text as closely as possible from the PDF (it won't be verbatim LaTeX, but should faithfully represent the source)
 - For equations, reconstruct the LaTeX from the PDF rendering
@@ -103,7 +147,7 @@ ${!hasSource ? `\nSince no LaTeX source is available, use the PDF as your primar
 Execute these stages in order, writing checkpoint files after each:
 
 ### Stage 1: Source Exploration
-- ${hasSource ? 'Read all .tex files (start with main .tex, follow \\\\input{} / \\\\include{} references)' : 'Read the PDF thoroughly, page by page'}
+- ${isWebpage ? 'Read page.md and page-metadata.json thoroughly; use page.html only when the readable extraction needs confirmation' : hasSource ? 'Read all .tex files (start with main .tex, follow \\\\input{} / \\\\include{} references)' : 'Read the PDF thoroughly, page by page'}
 - ${hasPdf && hasSource ? 'Read the PDF for overview context' : ''}
 - Map the structure: sections, key equations, theorems, algorithms, tables, figures
 - **Determine the source type** (research paper vs. textbook chapter vs. other) and note this in your exploration file — this will guide your approach for the rest of the pipeline
@@ -140,8 +184,8 @@ Each excerpt should be one of:
 If an excerpt mixes prose with math (e.g., a sentence defining a variable followed by an equation, or a paragraph that includes inline math expressions), it MUST be typed as "text", NOT "equation". The "equation" type is ONLY for excerpts whose entire content is a mathematical expression — no natural-language sentences surrounding it. When in doubt, use "text". The text renderer supports both inline math (\`$...$\`) and display math (\`$$...$$\`), so equations embedded in prose will render correctly as text excerpts.
 
 For EACH excerpt you collect:
-1. Read the source ${hasSource ? '.tex file' : 'PDF page'} containing it
-2. Copy the EXACT raw ${hasSource ? 'LaTeX' : 'text'} into \`latexSource\` — character for character
+1. Read the source ${isWebpage ? 'webpage file' : hasSource ? '.tex file' : 'PDF page'} containing it
+2. Copy the EXACT raw ${isWebpage ? 'webpage text/HTML' : hasSource ? 'LaTeX' : 'text'} into \`latexSource\` — character for character
 3. Record which file it came from
 4. Write a KaTeX-renderable version into \`content\` (see below)
 
@@ -158,9 +202,10 @@ For EACH excerpt you collect:
 
 **Figure excerpts**: For diagrams, charts, tables, and illustrations:
 - \`content\` should be the figure's caption text (cleaned of LaTeX artifacts, like text excerpts)
-- \`latexSource\` should be the raw \\begin{figure}...\\end{figure} (or \\begin{table}...\\end{table}) block from the ${hasSource ? '.tex file' : 'PDF'}
+- \`latexSource\` should be the raw \\begin{figure}...\\end{figure} (or \\begin{table}...\\end{table}) block from the ${isWebpage ? 'webpage source/caption/alt text' : hasSource ? '.tex file' : 'PDF'}
 - \`label\` should be e.g. "Figure 1" or "Table 2"
 - \`pdfRegion\` is especially important for figures — match against "image" type blocks in the regions index (see below)
+${isWebpage ? '- For webpage figures, set `visualUrl` to the matching absolute image URL from `page-metadata.json` when a useful diagram/image is available.' : ''}
 
 **PDF Region mapping** (if regions index is available):
 For each excerpt, find the matching block(s) in the regions index and add a \`pdfRegion\` field:
@@ -184,8 +229,8 @@ End the file with: EXCERPTS_COMPLETE
 
 ### Stage 4: Verification
 For EVERY excerpt collected in Stage 3:
-1. ${hasSource ? 'Use Grep to search for a distinctive phrase from the `latexSource` in the source files' : 'Verify the excerpt text against the PDF regions index or re-read the relevant PDF page'}
-2. Confirm the raw ${hasSource ? 'LaTeX' : 'text'} source exists ${hasSource ? 'verbatim in the .tex files' : 'in the PDF'}
+1. ${isWebpage ? 'Use Grep/Read to search for a distinctive phrase from the `latexSource` in page.md or page.html, and verify any `visualUrl` against page-metadata.json' : hasSource ? 'Use Grep to search for a distinctive phrase from the `latexSource` in the source files' : 'Verify the excerpt text against the PDF regions index or re-read the relevant PDF page'}
+2. Confirm the raw ${isWebpage ? 'webpage quote' : hasSource ? 'LaTeX' : 'text'} source exists ${isWebpage ? 'verbatim in the webpage source bundle' : hasSource ? 'verbatim in the .tex files' : 'in the PDF'}
 3. For equation excerpts, verify that \`content\` is mathematically equivalent to \`latexSource\` (same symbols, operators, structure — just cleaned for KaTeX)
 4. If a latexSource cannot be verified in the source files, REMOVE the excerpt or replace it with a verified one
 
@@ -234,6 +279,8 @@ Assemble everything into a single story.json file.
           "type": "<text|equation|figure>",
           "sourceFile": "<relative path to source file>",
           "label": "<e.g. 'Section 3.2' or 'Equation 5' or 'Definition 1'>",
+          "visualUrl": "<optional absolute image URL for webpage figure excerpts>",
+          "sourceUrl": "<optional webpage URL for webpage excerpts>",
           "pdfRegion": { "page": "<from regions index>", "bbox": ["<x0, y0, x1, y1 from matching block>"] }
         }
       ],
@@ -266,6 +313,8 @@ After writing, end by creating a file ${generationDir}/DONE containing just the 
 - When in doubt, include MORE source context in latexSource, not less.
 - For equations, the \`content\` field should be KaTeX-renderable LaTeX (adapted from source if needed). The \`latexSource\` field must be the raw verbatim copy.
 - For text excerpts, the \`content\` field should be readable (no \\cite{} etc.) but the \`latexSource\` should be the raw version.
+- For webpage excerpts, \`latexSource\` still means "raw source quote": copy the exact source sentence/paragraph/caption from \`page.md\` or \`page.html\`. Prefer setting \`sourceFile\` to \`page.md\`; use \`page.html\` only when verifying an image or caption that is clearer in the raw HTML.
+- For webpage figure excerpts, include \`visualUrl\` when \`page-metadata.json\` has a relevant image URL. Do not invent image URLs.
 - Generate a proper UUID v4 for the story id.
 `;
 }

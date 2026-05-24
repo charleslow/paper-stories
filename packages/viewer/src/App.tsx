@@ -134,6 +134,8 @@ export default function App() {
         onSelect={navigateChapter}
         title={story.title}
         arxivUrl={story.arxivUrl}
+        sourceUrl={story.sourceUrl ?? null}
+        sourceType={story.sourceType ?? null}
         theme={theme}
         onToggleTheme={toggleTheme}
       />
@@ -151,6 +153,8 @@ export default function App() {
           title: story.title,
           arxivId: story.arxivId,
           arxivUrl: story.arxivUrl,
+          sourceType: story.sourceType ?? null,
+          sourceUrl: story.sourceUrl ?? null,
           authors: story.authors ?? null,
           publishedYear: story.publishedYear ?? null,
           publishedMonth: story.publishedMonth ?? null,
