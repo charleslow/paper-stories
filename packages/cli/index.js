@@ -12,7 +12,7 @@
  *   paper-stories generate --mode webpage https://example.com/article
  */
 
-import { Command } from 'commander';
+import { Command, Option } from 'commander';
 import { spawn, execFileSync } from 'child_process';
 import { mkdirSync, existsSync, readFileSync, writeFileSync, unlinkSync, copyFileSync } from 'fs';
 import { join, resolve, dirname } from 'path';
@@ -45,7 +45,11 @@ program
   .option('-o, --output-dir <dir>', 'Output directory', '.')
   .option('-c, --cache-repo <path>', 'Path to code-stories-cache repo for direct publishing')
   .option('-s, --slug <slug>', 'Story slug for the output filename')
-  .option('--mode <mode>', 'Story generation mode: paper, textbook, or webpage (required)')
+  .addOption(
+    new Option('--mode <mode>', 'Story generation mode (required)')
+      .choices(['paper', 'textbook', 'webpage'])
+      .makeOptionMandatory(),
+  )
   .option('--pdf <path>', 'Path to local PDF file (for paper or textbook mode)')
   .option('--models <overrides>', 'Override stage models, e.g. exploration=gpt-5.4,explanations=claude-sonnet-4-6')
   .action(async (source, options) => {
@@ -54,16 +58,6 @@ program
         loadDefaultConfig(),
         parseModelOverrides(options.models),
       );
-
-      const validModes = ['paper', 'textbook', 'webpage'];
-      if (!options.mode) {
-        console.error('✗ Error: --mode is required. Choose one of: paper, textbook, webpage.');
-        process.exit(1);
-      }
-      if (!validModes.includes(options.mode)) {
-        console.error(`✗ Error: invalid --mode "${options.mode}". Choose one of: paper, textbook, webpage.`);
-        process.exit(1);
-      }
 
       if (options.mode === 'webpage') {
         if (!source) {
@@ -122,7 +116,6 @@ async function generateWebpageStory(url, options) {
     regionsPath: null,
     generationDir,
     title: metadata.title,
-    sourceType: 'webpage',
     sourceUrl: metadata.url,
     mode: options.mode,
   });
@@ -189,7 +182,6 @@ async function generateLocalStory(options) {
     regionsPath,
     generationDir,
     title: null,
-    sourceType: 'local',
     sourceUrl: null,
     mode: options.mode,
   });
@@ -265,7 +257,6 @@ async function generateStory(arxivInput, options) {
     regionsPath,
     generationDir,
     title: null,
-    sourceType: 'arxiv',
     sourceUrl: arxivUrl,
     mode: options.mode,
   });

@@ -18,14 +18,12 @@ export function buildPrompt({
   regionsPath,
   generationDir,
   title,
-  sourceType: providedSourceType,
   sourceUrl: providedSourceUrl,
   mode,
 }) {
   const hasSource = !!sourceDir;
   const hasPdf = !!pdfPath;
   const hasRegions = !!regionsPath;
-  const sourceType = providedSourceType || (arxivId ? 'arxiv' : 'local');
   const sourceUrl = providedSourceUrl || arxivUrl || null;
   const isWebpage = mode === 'webpage';
   // Source identification
