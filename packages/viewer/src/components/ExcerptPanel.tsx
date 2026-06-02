@@ -13,6 +13,8 @@ interface ExcerptPanelProps {
     title: string;
     arxivId: string | null;
     arxivUrl: string | null;
+    sourceType?: string | null;
+    sourceUrl?: string | null;
     authors: string[] | null;
     publishedYear: number | null;
     publishedMonth: number | null;
@@ -43,7 +45,7 @@ export default function ExcerptPanel({ excerpts, pdfUrl, storyMeta }: ExcerptPan
             {storyMeta.institutions && storyMeta.institutions.length > 0 && (
               <div className="meta-institutions">{storyMeta.institutions.join(' · ')}</div>
             )}
-            {storyMeta.arxivUrl && storyMeta.arxivId && (
+            {storyMeta.arxivUrl && storyMeta.arxivId ? (
               <a
                 href={storyMeta.arxivUrl}
                 target="_blank"
@@ -52,7 +54,16 @@ export default function ExcerptPanel({ excerpts, pdfUrl, storyMeta }: ExcerptPan
               >
                 arXiv: {storyMeta.arxivId}
               </a>
-            )}
+            ) : storyMeta.sourceUrl ? (
+              <a
+                href={storyMeta.sourceUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="meta-arxiv"
+              >
+                {storyMeta.sourceType === 'webpage' ? 'Open webpage' : 'Open source'}
+              </a>
+            ) : null}
             {storyMeta.query && (
               <div className="meta-query">
                 <span className="meta-query-label">Focus:</span> {storyMeta.query}
@@ -95,7 +106,25 @@ function ExcerptCard({ excerpt, pdfUrl }: { excerpt: Excerpt; pdfUrl?: string })
         )}
       </div>
 
-      {excerpt.type === 'figure' && pdfUrl && excerpt.pdfRegion ? (
+      {excerpt.type === 'figure' && excerpt.visualUrl ? (
+        <>
+          <figure className="excerpt-visual">
+            <img src={excerpt.visualUrl} alt={excerpt.visualAlt || excerpt.content || excerpt.label || 'Webpage figure'} />
+            {excerpt.content && (
+              <figcaption className="excerpt-content excerpt-caption">
+                <ReactMarkdown
+                  remarkPlugins={[remarkMath]}
+                  rehypePlugins={[rehypeKatex]}
+                  allowedElements={excerptAllowedElements}
+                  unwrapDisallowed={true}
+                >
+                  {excerpt.content}
+                </ReactMarkdown>
+              </figcaption>
+            )}
+          </figure>
+        </>
+      ) : excerpt.type === 'figure' && pdfUrl && excerpt.pdfRegion ? (
         <>
           <PdfRegionViewer
             pdfUrl={pdfUrl}
@@ -147,7 +176,7 @@ function ExcerptCard({ excerpt, pdfUrl }: { excerpt: Excerpt; pdfUrl?: string })
         className="excerpt-source-toggle"
         onClick={() => setShowSource(!showSource)}
       >
-        {showSource ? '▾ Hide LaTeX Source' : '▸ Show LaTeX Source'}
+        {showSource ? '▾ Hide Source' : '▸ Show Source'}
       </button>
 
       {showSource && (

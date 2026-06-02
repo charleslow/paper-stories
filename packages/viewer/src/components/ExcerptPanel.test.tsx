@@ -60,6 +60,38 @@ describe('ExcerptPanel', () => {
     expect(screen.getByText('Test Paper')).toBeInTheDocument();
   });
 
+  it('renders webpage metadata link for non-arxiv stories', () => {
+    render(<ExcerptPanel excerpts={[]} storyMeta={{
+      title: 'Test Webpage', arxivId: null, arxivUrl: null,
+      sourceType: 'webpage', sourceUrl: 'https://example.com/post', query: null,
+      authors: null, publishedYear: null, publishedMonth: null, institutions: null,
+    }} />);
+    const link = screen.getByText('Open webpage');
+    expect(link).toBeInTheDocument();
+    expect(link).toHaveAttribute('href', 'https://example.com/post');
+  });
+
+  it('renders webpage figure visualUrl when no PDF is available', () => {
+    const figureExcerpt: Excerpt = {
+      content: 'A routing diagram.',
+      latexSource: 'A routing diagram.',
+      type: 'figure',
+      sourceFile: 'page.md',
+      label: 'Diagram',
+      visualUrl: 'https://example.com/diagram.png',
+      visualAlt: 'Routing diagram',
+    };
+    render(<ExcerptPanel excerpts={[figureExcerpt]} />);
+    const image = screen.getByAltText('Routing diagram');
+    expect(image).toBeInTheDocument();
+    expect(image).toHaveAttribute('src', 'https://example.com/diagram.png');
+  });
+
+  it('uses generic source toggle label', () => {
+    render(<ExcerptPanel excerpts={[baseExcerpt]} />);
+    expect(screen.getByText('▸ Show Source')).toBeInTheDocument();
+  });
+
   it('renders text excerpt with no math as plain text', () => {
     const noMathExcerpt: Excerpt = {
       content: 'This excerpt has no math at all.',

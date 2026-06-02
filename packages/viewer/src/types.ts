@@ -10,6 +10,9 @@ export interface Excerpt {
   sourceFile: string;
   label: string;
   pdfRegion?: PdfRegion;  // Optional PDF bounding box for the excerpt
+  visualUrl?: string;      // Optional webpage image/diagram URL for figure excerpts
+  visualAlt?: string;
+  sourceUrl?: string;
 }
 
 export interface Chapter {
@@ -24,6 +27,8 @@ export interface Story {
   title: string;
   arxivId: string | null;
   arxivUrl: string | null;
+  sourceType?: 'arxiv' | 'local' | 'webpage' | string | null;
+  sourceUrl?: string | null;
   authors: string[] | null;
   publishedYear: number | null;
   publishedMonth: number | null;

@@ -7,18 +7,33 @@ interface SidebarProps {
   onSelect: (index: number) => void;
   title: string;
   arxivUrl: string | null;
+  sourceUrl?: string | null;
+  sourceType?: string | null;
   theme: Theme;
   onToggleTheme: () => void;
 }
 
-export default function Sidebar({ chapters, currentChapter, onSelect, title, arxivUrl, theme, onToggleTheme }: SidebarProps) {
+export default function Sidebar({
+  chapters,
+  currentChapter,
+  onSelect,
+  title,
+  arxivUrl,
+  sourceUrl,
+  sourceType,
+  theme,
+  onToggleTheme,
+}: SidebarProps) {
+  const sourceHref = arxivUrl || sourceUrl;
+  const sourceLabel = arxivUrl ? '📄 arXiv' : sourceType === 'webpage' ? '↗ Webpage' : '↗ Source';
+
   return (
     <aside className="sidebar">
       <div className="sidebar-header">
         <h1 className="sidebar-title">{title}</h1>
-        {arxivUrl && (
-          <a href={arxivUrl} target="_blank" rel="noopener noreferrer" className="sidebar-arxiv-link">
-            📄 arXiv
+        {sourceHref && (
+          <a href={sourceHref} target="_blank" rel="noopener noreferrer" className="sidebar-arxiv-link">
+            {sourceLabel}
           </a>
         )}
       </div>

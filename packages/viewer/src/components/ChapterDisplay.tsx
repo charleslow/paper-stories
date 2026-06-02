@@ -19,6 +19,8 @@ interface ChapterDisplayProps {
     title: string;
     arxivId: string | null;
     arxivUrl: string | null;
+    sourceType?: string | null;
+    sourceUrl?: string | null;
     authors: string[] | null;
     publishedYear: number | null;
     publishedMonth: number | null;

@@ -51,6 +51,26 @@ describe('validateStory', () => {
   it('rejects invalid excerpt type', () => {
     assert.throws(() => validateStory(makeStory({}, {}, { type: 'video' })), /invalid excerpt type/);
   });
+
+  it('accepts webpage metadata and visual figure URLs', () => {
+    assert.doesNotThrow(() => validateStory(makeStory({
+      sourceType: 'webpage',
+      sourceUrl: 'https://example.com/post',
+      arxivId: null,
+      arxivUrl: null,
+    }, {}, {
+      type: 'figure',
+      visualUrl: 'https://example.com/diagram.png',
+      sourceUrl: 'https://example.com/post',
+    })));
+  });
+
+  it('rejects invalid webpage extension fields', () => {
+    assert.throws(() => validateStory(makeStory({ sourceType: 42 })), /sourceType/);
+    assert.throws(() => validateStory(makeStory({ sourceUrl: 42 })), /sourceUrl/);
+    assert.throws(() => validateStory(makeStory({}, {}, { visualUrl: 42 })), /visualUrl/);
+    assert.throws(() => validateStory(makeStory({}, {}, { sourceUrl: 42 })), /sourceUrl/);
+  });
 });
 
 describe('validateStory — pdfRegion', () => {

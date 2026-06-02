@@ -11,8 +11,8 @@ describe('CLI config', () => {
   it('loads packaged default models', () => {
     const config = loadDefaultConfig();
 
-    assert.equal(config.models.exploration, 'claude-sonnet-4-6');
-    assert.equal(config.models.explanations, 'claude-sonnet-4-6');
+    assert.equal(config.models.exploration, 'gpt-5.4');
+    assert.equal(config.models.explanations, 'claude-opus-4-6');
     assert.equal(config.models.chat, 'gpt-5.4');
   });
 

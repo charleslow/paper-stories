@@ -6,6 +6,12 @@
 export function validateStory(story) {
   if (!story.id || typeof story.id !== 'string') throw new Error('Missing or invalid story.id');
   if (!story.title || typeof story.title !== 'string') throw new Error('Missing or invalid story.title');
+  if (story.sourceType !== undefined && story.sourceType !== null && typeof story.sourceType !== 'string') {
+    throw new Error('Invalid story.sourceType');
+  }
+  if (story.sourceUrl !== undefined && story.sourceUrl !== null && typeof story.sourceUrl !== 'string') {
+    throw new Error('Invalid story.sourceUrl');
+  }
   if (!Array.isArray(story.chapters) || story.chapters.length < 5) {
     throw new Error(`Expected at least 5 chapters, got ${story.chapters?.length || 0}`);
   }
@@ -36,6 +42,12 @@ export function validateStory(story) {
       }
       if (!['text', 'equation', 'figure'].includes(ex.type)) {
         throw new Error(`Chapter ${ch.id} has invalid excerpt type: ${ex.type}`);
+      }
+      if (ex.visualUrl !== undefined && typeof ex.visualUrl !== 'string') {
+        throw new Error(`Chapter ${ch.id} has excerpt with invalid visualUrl`);
+      }
+      if (ex.sourceUrl !== undefined && typeof ex.sourceUrl !== 'string') {
+        throw new Error(`Chapter ${ch.id} has excerpt with invalid sourceUrl`);
       }
       if (ex.pdfRegion) {
         const { page, bbox } = ex.pdfRegion;
