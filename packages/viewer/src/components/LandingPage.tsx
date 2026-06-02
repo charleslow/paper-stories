@@ -91,6 +91,12 @@ export default function LandingPage({ theme, onToggleTheme }: { theme: Theme; on
           </ul>
         </div>
 
+        <div className="landing-debug">
+          <a href={`${import.meta.env.BASE_URL}pdf-diagnostic.html`}>
+            🔧 PDF viewer diagnostic
+          </a>
+        </div>
+
         {localStories.length > 0 && (
           <div className="landing-recent">
             <h3>Local Stories</h3>
