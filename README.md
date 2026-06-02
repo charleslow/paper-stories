@@ -26,16 +26,17 @@ The CLI auto-detects whether the source is a **research paper** or a **textbook 
 ```bash
 cd packages/cli
 npm install
-node index.js generate https://arxiv.org/abs/1706.03762 --query "attention mechanism"
+node index.js generate --mode paper https://arxiv.org/abs/1706.03762 --query "attention mechanism"
 ```
 
 ### Generate a story from a textbook chapter (local PDF)
 
 ```bash
-node index.js generate --pdf ./linear-algebra-ch3.pdf --query "eigenvalues" --slug "eigenvalues"
+node index.js generate --mode textbook --pdf ./linear-algebra-ch3.pdf --query "eigenvalues" --slug "eigenvalues"
 ```
 
 Options:
+- `--mode <mode>` — Story generation mode: `paper`, `textbook`, or `webpage` (required)
 - `--pdf <path>` — Use a local PDF instead of an arXiv URL (e.g. a textbook chapter)
 - `-q, --query <query>` — Focus the story on a specific aspect
 - `-c, --cache-repo <path>` — Publish directly to code-stories-cache repo
