@@ -6,10 +6,10 @@
  * Generates interactive walkthrough stories from arXiv papers, local PDFs, or webpages.
  *
  * Usage:
- *   paper-stories generate <arxiv-url> [--query "..."] [--output-dir ./out]
- *   paper-stories generate 2401.12345 --query "attention mechanism"
- *   paper-stories generate --pdf ./ch4.pdf
- *   paper-stories generate --webpage https://example.com/article
+ *   paper-stories generate --mode paper 2401.12345 [--query "..."] [--output-dir ./out]
+ *   paper-stories generate --mode paper --pdf ./paper.pdf
+ *   paper-stories generate --mode textbook --pdf ./ch4.pdf
+ *   paper-stories generate --mode webpage https://example.com/article
  */
 
 import { Command } from 'commander';
@@ -40,31 +40,52 @@ program
 program
   .command('generate')
   .description('Generate a story from an arXiv paper, local PDF, or webpage')
-  .argument('[arxiv]', 'arXiv URL or paper ID (e.g., 2401.12345). Omit when using --pdf or --webpage.')
+  .argument('[source]', 'arXiv URL/ID (paper or textbook mode) or webpage URL (webpage mode). Omit when using --pdf.')
   .option('-q, --query <query>', 'Optional focus query for the story')
   .option('-o, --output-dir <dir>', 'Output directory', '.')
   .option('-c, --cache-repo <path>', 'Path to code-stories-cache repo for direct publishing')
   .option('-s, --slug <slug>', 'Story slug for the output filename')
-  .option('--pdf <path>', 'Path to local PDF file (for textbooks, chapters, or any non-arXiv source)')
-  .option('--webpage <url>', 'URL of an HTML webpage, article, or blog post to turn into a story')
+  .option('--mode <mode>', 'Story generation mode: paper, textbook, or webpage (required)')
+  .option('--pdf <path>', 'Path to local PDF file (for paper or textbook mode)')
   .option('--models <overrides>', 'Override stage models, e.g. exploration=gpt-5.4,explanations=claude-sonnet-4-6')
-  .action(async (arxiv, options) => {
+  .action(async (source, options) => {
     try {
       options.config = mergeConfigs(
         loadDefaultConfig(),
         parseModelOverrides(options.models),
       );
-      const inputModes = [Boolean(arxiv), Boolean(options.pdf), Boolean(options.webpage)].filter(Boolean).length;
-      if (inputModes !== 1) {
-        console.error('✗ Error: provide exactly one input: an arXiv URL/ID, --pdf <path>, or --webpage <url>.');
+
+      const validModes = ['paper', 'textbook', 'webpage'];
+      if (!options.mode) {
+        console.error('✗ Error: --mode is required. Choose one of: paper, textbook, webpage.');
         process.exit(1);
       }
-      if (options.pdf) {
-        await generateLocalStory(options);
-      } else if (options.webpage) {
-        await generateWebpageStory(options);
+      if (!validModes.includes(options.mode)) {
+        console.error(`✗ Error: invalid --mode "${options.mode}". Choose one of: paper, textbook, webpage.`);
+        process.exit(1);
+      }
+
+      if (options.mode === 'webpage') {
+        if (!source) {
+          console.error('✗ Error: --mode webpage requires a URL as the positional argument.');
+          process.exit(1);
+        }
+        if (options.pdf) {
+          console.error('✗ Error: --pdf cannot be used with --mode webpage.');
+          process.exit(1);
+        }
+        await generateWebpageStory(source, options);
       } else {
-        await generateStory(arxiv, options);
+        const inputCount = [Boolean(source), Boolean(options.pdf)].filter(Boolean).length;
+        if (inputCount !== 1) {
+          console.error('✗ Error: provide exactly one input: an arXiv URL/ID or --pdf <path>.');
+          process.exit(1);
+        }
+        if (options.pdf) {
+          await generateLocalStory(options);
+        } else {
+          await generateStory(source, options);
+        }
       }
     } catch (err) {
       console.error(`\n✗ Error: ${err.message}`);
@@ -77,11 +98,11 @@ program.parse();
 /**
  * Generate a story from a webpage.
  */
-async function generateWebpageStory(options) {
+async function generateWebpageStory(url, options) {
   const generationId = uuidv4();
 
   console.log(`\n🌐 Paper Stories Generator (webpage)`);
-  console.log(`   URL: ${options.webpage}`);
+  console.log(`   URL: ${url}`);
   console.log(`   Query: ${options.query || '(comprehensive deep-dive)'}`);
   console.log(`   Generation ID: ${generationId}\n`);
 
@@ -90,7 +111,7 @@ async function generateWebpageStory(options) {
   mkdirSync(generationDir, { recursive: true });
 
   console.log('📥 Fetching webpage source...');
-  const { sourceResult, metadata } = await prepareWebpage(options.webpage, workDir);
+  const { sourceResult, metadata } = await prepareWebpage(url, workDir);
 
   const prompt = buildPrompt({
     arxivId: null,
@@ -103,6 +124,7 @@ async function generateWebpageStory(options) {
     title: metadata.title,
     sourceType: 'webpage',
     sourceUrl: metadata.url,
+    mode: options.mode,
   });
 
   await runGenerationPipeline({
@@ -169,6 +191,7 @@ async function generateLocalStory(options) {
     title: null,
     sourceType: 'local',
     sourceUrl: null,
+    mode: options.mode,
   });
 
   // Run the shared generation pipeline
@@ -244,6 +267,7 @@ async function generateStory(arxivInput, options) {
     title: null,
     sourceType: 'arxiv',
     sourceUrl: arxivUrl,
+    mode: options.mode,
   });
 
   // Run the shared generation pipeline
