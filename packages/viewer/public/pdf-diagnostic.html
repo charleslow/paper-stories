@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PDF Viewer Diagnostic</title>
+<!--
+  Self-contained capability probe for diagnosing why the PDF viewer fails on
+  older Android WebViews (e.g. Onyx Boox Max 3, Android 9).
+
+  Open this page on the device, then screenshot the results. It reports the
+  WebView user-agent and a pass/fail matrix for every browser feature that
+  pdfjs-dist v5 depends on. No network, build step, or devtools required.
+
+  IMPORTANT: this file is intentionally written in conservative ES2017 syntax
+  (no optional chaining, no nullish coalescing, no private fields) so the page
+  itself runs on the very browsers we are trying to diagnose.
+-->
+<style>
+  body {
+    font-family: -apple-system, system-ui, sans-serif;
+    font-size: 18px;
+    line-height: 1.5;
+    margin: 0;
+    padding: 16px;
+    background: #fff;
+    color: #000;
+  }
+  h1 { font-size: 22px; margin: 0 0 8px; }
+  h2 { font-size: 19px; margin: 24px 0 8px; border-bottom: 2px solid #000; padding-bottom: 4px; }
+  .ua {
+    background: #f0f0f0;
+    border: 1px solid #999;
+    padding: 8px;
+    word-break: break-all;
+    font-family: monospace;
+    font-size: 14px;
+  }
+  table { border-collapse: collapse; width: 100%; margin-top: 8px; }
+  td { border: 1px solid #ccc; padding: 6px 8px; vertical-align: top; }
+  td.name { font-weight: bold; width: 45%; }
+  td.result { width: 12%; text-align: center; font-weight: bold; }
+  .pass { background: #e6ffe6; }
+  .fail { background: #ffe6e6; }
+  .pass .result { color: #060; }
+  .fail .result { color: #900; }
+  td.note { font-size: 14px; color: #444; }
+  #summary { font-size: 20px; font-weight: bold; padding: 12px; margin-top: 16px; border: 2px solid #000; }
+</style>
+</head>
+<body>
+<h1>PDF Viewer Diagnostic</h1>
+<p>Screenshot this whole page and send it back.</p>
+
+<h2>WebView user-agent</h2>
+<div class="ua" id="ua">(reading…)</div>
+
+<h2>Feature support</h2>
+<table id="results"><tbody></tbody></table>
+
+<div id="summary">Running…</div>
+
+<script>
+(function () {
+  "use strict";
+
+  var rows = [];
+
+  // Each check returns true (supported) or false (missing). `note` explains
+  // why pdfjs needs it and the Chrome version that introduced it.
+  function check(name, note, fn) {
+    var ok = false;
+    try { ok = !!fn(); } catch (e) { ok = false; }
+    rows.push({ name: name, note: note, ok: ok });
+  }
+
+  // --- The blockers we already suspect (pdfjs v5) ---
+
+  check(
+    "Module workers",
+    "pdfjs v5 modern build creates new Worker(url, {type:'module'}). Chrome 80+.",
+    function () {
+      var supported = false;
+      var url = URL.createObjectURL(new Blob([""], { type: "text/javascript" }));
+      try {
+        // The browser only reads `type` if it understands module workers.
+        var w = new Worker(url, { get type() { supported = true; return "module"; } });
+        w.terminate();
+      } finally {
+        URL.revokeObjectURL(url);
+      }
+      return supported;
+    }
+  );
+
+  check(
+    "Classic workers",
+    "Fallback worker type. Supported since forever; if this fails, no PDF rendering at all.",
+    function () { return typeof Worker === "function"; }
+  );
+
+  check(
+    "Promise.withResolvers",
+    "Used throughout pdfjs v5 (incl. worker). Chrome 119+.",
+    function () { return typeof Promise.withResolvers === "function"; }
+  );
+
+  check(
+    "structuredClone",
+    "pdfjs copies image/font data with this. Chrome 98+. JSON polyfills corrupt typed arrays.",
+    function () { return typeof structuredClone === "function"; }
+  );
+
+  check(
+    "globalThis",
+    "pdfjs references globalThis everywhere. Chrome 71+.",
+    function () { return typeof globalThis === "object" && globalThis !== null; }
+  );
+
+  check(
+    "Array.prototype.at",
+    "Used by pdfjs. Chrome 92+.",
+    function () { return typeof Array.prototype.at === "function"; }
+  );
+
+  // --- Syntax-level parser checks (do older engines even parse the bundle?) ---
+
+  check(
+    "Optional chaining (a?.b)",
+    "Pervasive in pdfjs v5 source. Chrome 80+. If unsupported, the bundle fails to parse.",
+    function () {
+      // eslint-disable-next-line no-new-func
+      new Function("var a = {b:1}; return a?.b;");
+      return true;
+    }
+  );
+
+  check(
+    "Nullish coalescing (a ?? b)",
+    "Pervasive in pdfjs v5 source. Chrome 80+.",
+    function () {
+      new Function("return (null ?? 1);");
+      return true;
+    }
+  );
+
+  check(
+    "Private class fields (#x)",
+    "pdfjs v5 uses #private fields heavily. Chrome 74+.",
+    function () {
+      new Function("class A { #x = 1; get() { return this.#x; } }");
+      return true;
+    }
+  );
+
+  check(
+    "Static class blocks / using",
+    "pdfjs v5 worker uses `using` declarations. Chrome 121+.",
+    function () {
+      new Function("class A { static { this.x = 1; } }");
+      return true;
+    }
+  );
+
+  check(
+    "Dynamic import()",
+    "pdfjs uses import() to load the worker. Chrome 63+.",
+    function () {
+      new Function("return import('data:text/javascript,');");
+      return true;
+    }
+  );
+
+  // --- Other capabilities pdfjs may touch ---
+
+  check("Canvas 2D context", "Required to paint pages. No fallback exists.", function () {
+    var c = document.createElement("canvas");
+    return !!(c.getContext && c.getContext("2d"));
+  });
+
+  check("OffscreenCanvas", "Used for some pdfjs rendering paths. Chrome 69+.", function () {
+    return typeof OffscreenCanvas === "function";
+  });
+
+  check("WebAssembly", "pdfjs v5 uses WASM for some image codecs. Chrome 57+.", function () {
+    return typeof WebAssembly === "object";
+  });
+
+  check("BigInt", "Used by pdfjs. Chrome 67+.", function () {
+    return typeof BigInt === "function";
+  });
+
+  check("ReadableStream", "Streaming PDF fetches. Chrome 43+.", function () {
+    return typeof ReadableStream === "function";
+  });
+
+  check("Object.hasOwn", "Newer pdfjs helper. Chrome 93+.", function () {
+    return typeof Object.hasOwn === "function";
+  });
+
+  // --- Render results ---
+
+  document.getElementById("ua").textContent = navigator.userAgent;
+
+  var tbody = document.querySelector("#results tbody");
+  var failCount = 0;
+  for (var i = 0; i < rows.length; i++) {
+    var r = rows[i];
+    if (!r.ok) failCount++;
+    var tr = document.createElement("tr");
+    tr.className = r.ok ? "pass" : "fail";
+
+    var nameTd = document.createElement("td");
+    nameTd.className = "name";
+    nameTd.textContent = r.name;
+    tr.appendChild(nameTd);
+
+    var resTd = document.createElement("td");
+    resTd.className = "result";
+    resTd.textContent = r.ok ? "PASS" : "FAIL";
+    tr.appendChild(resTd);
+
+    var noteTd = document.createElement("td");
+    noteTd.className = "note";
+    noteTd.textContent = r.note;
+    tr.appendChild(noteTd);
+
+    tbody.appendChild(tr);
+  }
+
+  var summary = document.getElementById("summary");
+  if (failCount === 0) {
+    summary.textContent = "All " + rows.length + " checks passed — this browser should run pdfjs v5.";
+    summary.className = "pass";
+  } else {
+    summary.textContent = failCount + " of " + rows.length + " checks FAILED — these are why the PDF viewer breaks.";
+    summary.className = "fail";
+  }
+})();
+</script>
+</body>
+</html>
