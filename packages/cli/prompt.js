@@ -18,15 +18,14 @@ export function buildPrompt({
   regionsPath,
   generationDir,
   title,
-  sourceType: providedSourceType,
   sourceUrl: providedSourceUrl,
+  mode,
 }) {
   const hasSource = !!sourceDir;
   const hasPdf = !!pdfPath;
   const hasRegions = !!regionsPath;
-  const sourceType = providedSourceType || (arxivId ? 'arxiv' : 'local');
   const sourceUrl = providedSourceUrl || arxivUrl || null;
-  const isWebpage = sourceType === 'webpage';
+  const isWebpage = mode === 'webpage';
   // Source identification
   const sourceIdentification = isWebpage
     ? `- Source: Webpage\n- URL: ${sourceUrl}\n- Title: ${title || 'Detect from webpage metadata and content'}`
@@ -59,6 +58,41 @@ Each block has a \`type\` field: "text" (with a \`text\` field) or "image" (boun
 Use this to assign \`pdfRegion\` fields to excerpts (see Stage 3 for details).`
     : '';
 
+  // Mode-specific story instructions — only the relevant mode is included in the prompt.
+  const modeSection = mode === 'paper'
+    ? `## Story Mode: Research Paper
+
+- Tone: Knowledgeable colleague explaining the paper — technical but accessible
+- Assume the reader has ML background but hasn't read this paper
+- Pace: ~20 chapters for a comprehensive deep-dive, 8-15 for focused queries, up to 25 for dense papers
+- Structure: Overview → Problem → Related Work → Key Insight → Methodology → Experiments → Ablations → Limitations → Summary
+- Per-chapter length: Overview/Summary 200-300 words, Methodology 150-250, Results 100-200, Others 120-200
+- Excerpts: Exactly 1 per chapter (first and last chapters have 0)`
+    : mode === 'textbook'
+    ? `## Story Mode: Textbook Chapter
+
+- Tone: Patient teacher explaining to a motivated student — clear, encouraging, thorough
+- Assume the reader has basic mathematical maturity but is learning this topic for the first time
+- The goal is NOT to replace the textbook, but to provide a guided tour of key concepts so the reader can "clear" the material much faster on a second read-through
+- **Go slowly.** It is better to have too many chapters than to rush through a concept. Aim for **30-40 chapters**.
+- **Motivate concepts well.** Before introducing a definition or theorem, explain WHY it matters and what problem it solves.
+- **Cover thoroughly:** Key definitions, theorems, proofs (sketch the intuition), and core ideas should each get their own chapter. One teaching point per chapter.
+- **Build incrementally.** Use "As we saw in Chapter N..." connections.
+- **Include 1-3 insightful questions** at the end of the story (in the Summary chapter's explanation). Format as "**Questions to consider:**". These can be drawn from good exercises in the source or created to test genuine understanding and invite deeper thinking. These should NOT be trivial recall.
+- **Exercises:** If the source contains good exercises, reference them and hint at the approach without giving away the solution.
+- Structure: Overview → Motivation → Definitions (one per chapter) → Key Ideas → Theorems (one per chapter) → Examples → Connections → Summary
+- Per-chapter length: Overview/Summary 200-350 words, Definitions 200-300, Theorems 250-400, Examples 150-250, Others 150-250
+- Excerpts: 1-3 per chapter (first and last chapters have 0). Use multiple when a chapter covers definition + example, or theorem + proof step.`
+    : `## Story Mode: Webpage Guide
+
+- Tone: Clear technical guide through the page, using the page's own structure and claims as anchors
+- Assume the reader wants the page's ideas unpacked without losing source fidelity
+- Pace: 8-20 chapters depending on density; use fewer chapters for short posts and more for long technical pages
+- Structure: Overview → Context → Main Ideas → Diagrams/Examples → Implications → Caveats → Summary
+- Per-chapter length: 150-300 words, with longer chapters only when the webpage has dense technical arguments
+- Excerpts: 1-3 per chapter (first and last chapters have 0). Use multiple excerpts when pairing prose with a diagram, table, or example.
+- Diagrams/images: Use image candidates from \`page-metadata.json\` when they are central to understanding. For such excerpts, use \`type: "figure"\`, set \`visualUrl\` to the absolute image URL, and set \`content\` to the image caption, alt text, or nearby explanatory sentence.`;
+
   // Schema: use arxivId/arxivUrl if available, otherwise use source metadata.
   const schemaFields = isWebpage
     ? `"arxivId": null,
@@ -76,42 +110,7 @@ Use this to assign \`pdfRegion\` fields to excerpts (see Stage 3 for details).`
   return `You are a Paper Stories generator. Your job is to create a deep, technically rigorous walkthrough
 of the source material, structured as an interactive story.
 
-## Adapting to the Source Material
-
-After reading the source in Stage 1, decide how to approach it:
-
-**If the source is a research paper** (has abstract, contributions, experiments, related work):
-- Tone: Knowledgeable colleague explaining the paper — technical but accessible
-- Assume the reader has ML background but hasn't read this paper
-- Pace: ~20 chapters for a comprehensive deep-dive, 8-15 for focused queries, up to 25 for dense papers
-- Structure: Overview → Problem → Related Work → Key Insight → Methodology → Experiments → Ablations → Limitations → Summary
-- Per-chapter length: Overview/Summary 200-300 words, Methodology 150-250, Results 100-200, Others 120-200
-- Excerpts: Exactly 1 per chapter (first and last chapters have 0)
-
-**If the source is a textbook chapter** (has definitions, theorems, proofs, exercises, pedagogical structure):
-- Tone: Patient teacher explaining to a motivated student — clear, encouraging, thorough
-- Assume the reader has basic mathematical maturity but is learning this topic for the first time
-- The goal is NOT to replace the textbook, but to provide a guided tour of key concepts so the reader can "clear" the material much faster on a second read-through
-- **Go slowly.** It is better to have too many chapters than to rush through a concept. Aim for **30-40 chapters**.
-- **Motivate concepts well.** Before introducing a definition or theorem, explain WHY it matters and what problem it solves.
-- **Cover thoroughly:** Key definitions, theorems, proofs (sketch the intuition), and core ideas should each get their own chapter. One teaching point per chapter.
-- **Build incrementally.** Use "As we saw in Chapter N..." connections.
-- **Include 1-3 insightful questions** at the end of the story (in the Summary chapter's explanation). Format as "**Questions to consider:**". These can be drawn from good exercises in the source or created to test genuine understanding and invite deeper thinking. These should NOT be trivial recall.
-- **Exercises:** If the source contains good exercises, reference them and hint at the approach without giving away the solution.
-- Structure: Overview → Motivation → Definitions (one per chapter) → Key Ideas → Theorems (one per chapter) → Examples → Connections → Summary
-- Per-chapter length: Overview/Summary 200-350 words, Definitions 200-300, Theorems 250-400, Examples 150-250, Others 150-250
-- Excerpts: 1-3 per chapter (first and last chapters have 0). Use multiple when a chapter covers definition + example, or theorem + proof step.
-
-For anything in between (survey papers, tutorial-style papers, technical reports), use your judgment to blend the approaches.
-
-**If the source is a webpage** (blog post, documentation page, explainer, research lab article, or product/engineering post):
-- Tone: Clear technical guide through the page, using the page's own structure and claims as anchors
-- Assume the reader wants the page's ideas unpacked without losing source fidelity
-- Pace: 8-20 chapters depending on density; use fewer chapters for short posts and more for long technical pages
-- Structure: Overview → Context → Main Ideas → Diagrams/Examples → Implications → Caveats → Summary
-- Per-chapter length: 150-300 words, with longer chapters only when the webpage has dense technical arguments
-- Excerpts: 1-3 per chapter (first and last chapters have 0). Use multiple excerpts when pairing prose with a diagram, table, or example.
-- Diagrams/images: Use image candidates from \`page-metadata.json\` when they are central to understanding. For such excerpts, use \`type: "figure"\`, set \`visualUrl\` to the absolute image URL, and set \`content\` to the image caption, alt text, or nearby explanatory sentence.
+${modeSection}
 
 ## Source
 ${sourceIdentification}
@@ -150,7 +149,6 @@ Execute these stages in order, writing checkpoint files after each:
 - ${isWebpage ? 'Read page.md and page-metadata.json thoroughly; use page.html only when the readable extraction needs confirmation' : hasSource ? 'Read all .tex files (start with main .tex, follow \\\\input{} / \\\\include{} references)' : 'Read the PDF thoroughly, page by page'}
 - ${hasPdf && hasSource ? 'Read the PDF for overview context' : ''}
 - Map the structure: sections, key equations, theorems, algorithms, tables, figures
-- **Determine the source type** (research paper vs. textbook chapter vs. other) and note this in your exploration file — this will guide your approach for the rest of the pipeline
 - **Extract paper metadata** from the title page, abstract, or author block:
   - Authors: full names as they appear in the paper
   - Publication date: month and year (check submission date, conference proceedings, journal volume, or arXiv date)
@@ -161,7 +159,7 @@ Execute these stages in order, writing checkpoint files after each:
 ### Stage 2: Chapter Outline
 Design chapters that best serve the user's query and the source content.
 
-Adapt your chapter count and structure based on what you determined in Stage 1 (see "Adapting to the Source Material" above).
+Follow the chapter count and structure from your Story Mode guidelines above.
 
 **Required constraints**:
 - First chapter: Overview (no excerpts) — orient the reader
@@ -221,8 +219,7 @@ For each excerpt, find the matching block(s) in the regions index and add a \`pd
 Guidelines:
 - Prefer excerpts that teach something concrete — definitions, theorem statements, key equations, illuminating examples
 - For text, include enough context to be meaningful (2-6 sentences)
-- For research papers: exactly 1 excerpt per chapter (first and last chapters have 0)
-- For textbook chapters: 1-3 excerpts per chapter (first and last have 0). Use multiple when covering definition + example, or theorem + proof step.
+- Follow the excerpt count from your Story Mode guidelines above (first and last chapters always have 0).
 
 Write excerpts to ${generationDir}/excerpts.md
 End the file with: EXCERPTS_COMPLETE
@@ -248,7 +245,7 @@ Write the explanation markdown for each chapter:
 - **Cross-references**: Connect chapters ("As we saw in Chapter 3..." or "This connects to the loss function in the next chapter")
 - **Vary transitions**: Don't start more than 2 chapters with the same pattern
 - **Critical analysis**: Don't just describe — interpret. "This is clever because...", "The limitation here is...", "Compared to X, this approach..."
-- Adapt tone and depth to the source type (see "Adapting to the Source Material" above)
+- Adapt tone and depth to the source type (see your Story Mode guidelines above)
 
 Write explanations to ${generationDir}/explanations.md
 End the file with: EXPLANATIONS_COMPLETE
