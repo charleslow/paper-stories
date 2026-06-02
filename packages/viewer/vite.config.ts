@@ -427,6 +427,25 @@ export default defineConfig({
     port: 5174,
     allowedHosts: true,
   },
+  // Lower ES2020+ syntax (optional chaining, nullish coalescing, private fields,
+  // using declarations) to Chrome 69-compatible code. Covers both the main
+  // bundle and pre-bundled dependencies (pdfjs-dist v5 uses all of the above).
+  esbuild: {
+    target: 'chrome69',
+  },
+  optimizeDeps: {
+    esbuildOptions: {
+      target: 'chrome69',
+    },
+  },
+  build: {
+    target: 'chrome69',
+  },
+  // Build workers as classic IIFE scripts so the browser creates them with
+  // new Worker(url) — no {type:"module"} option — which Chrome 69 supports.
+  worker: {
+    format: 'iife',
+  },
   plugins: [
     react(),
     {

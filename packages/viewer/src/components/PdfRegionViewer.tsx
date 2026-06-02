@@ -1,8 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import * as pdfjsLib from 'pdfjs-dist';
-import pdfjsWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
+import PdfWorker from '../pdf-worker-entry?worker';
 
-pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorkerUrl;
+// Use a pre-constructed classic Worker so pdfjs never calls
+// new Worker(url, {type:"module"}) internally — module workers require Chrome 80+.
+// With worker.format:'iife' in vite.config.ts the bundle is a classic script
+// that works on Android 9 (Chrome ~69) WebView.
+pdfjsLib.GlobalWorkerOptions.workerPort = new PdfWorker();
 
 // Cache loaded PDF documents by URL (LRU, capped at MAX_CACHED_DOCS)
 const MAX_CACHED_DOCS = 5;
