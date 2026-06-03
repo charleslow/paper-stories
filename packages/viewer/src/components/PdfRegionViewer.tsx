@@ -6,7 +6,18 @@ import PdfWorker from '../pdf-worker-entry?worker';
 // new Worker(url, {type:"module"}) internally — module workers require Chrome 80+.
 // With worker.format:'iife' in vite.config.ts the bundle is a classic script
 // that works on Android 9 (Chrome ~69) WebView.
-pdfjsLib.GlobalWorkerOptions.workerPort = new PdfWorker();
+let workerInitError: string | null = null;
+try {
+  const pdfWorker = new PdfWorker();
+  pdfWorker.onerror = (e) => {
+    workerInitError = `Worker script error: ${(e as ErrorEvent).message || 'unknown'}`;
+    console.error('PDF worker init error:', e);
+  };
+  pdfjsLib.GlobalWorkerOptions.workerPort = pdfWorker;
+} catch (e) {
+  workerInitError = `Worker constructor failed: ${e instanceof Error ? e.message : String(e)}`;
+  console.error('PDF worker constructor failed:', e);
+}
 
 // Cache loaded PDF documents by URL (LRU, capped at MAX_CACHED_DOCS)
 const MAX_CACHED_DOCS = 5;
@@ -62,6 +73,7 @@ export default function PdfRegionViewer({ pdfUrl, page, bbox }: PdfRegionViewerP
   const highlightRef = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(DEFAULT_SCALE);
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [errorDetail, setErrorDetail] = useState<string>('');
   const [x0, y0, x1, y1] = bbox;
 
   // IMPORTANT: pdfjs-dist v5 render() pitfalls
@@ -81,6 +93,12 @@ export default function PdfRegionViewer({ pdfUrl, page, bbox }: PdfRegionViewerP
 
     let cancelled = false;
     setStatus('loading');
+
+    if (workerInitError) {
+      setErrorDetail(workerInitError);
+      setStatus('error');
+      return;
+    }
 
     const task = (async () => {
       const doc = await getPdfDocument(pdfUrl);
@@ -124,7 +142,9 @@ export default function PdfRegionViewer({ pdfUrl, page, bbox }: PdfRegionViewerP
 
     task.catch((err) => {
       if (!cancelled) {
+        const msg = err instanceof Error ? err.message : String(err);
         console.error('PdfRegionViewer: failed to render page', { pdfUrl, page, err });
+        setErrorDetail(msg);
         setStatus('error');
       }
     });
@@ -144,6 +164,12 @@ export default function PdfRegionViewer({ pdfUrl, page, bbox }: PdfRegionViewerP
     return (
       <div className="pdf-region-viewer pdf-region-error">
         <span>Failed to load PDF page</span>
+        {errorDetail && (
+          <details style={{ marginTop: 4, fontSize: 12 }}>
+            <summary>Details</summary>
+            <code style={{ wordBreak: 'break-all', whiteSpace: 'pre-wrap' }}>{errorDetail}</code>
+          </details>
+        )}
       </div>
     );
   }
