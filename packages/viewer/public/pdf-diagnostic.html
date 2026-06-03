@@ -204,6 +204,12 @@
     function () { return typeof new Uint8Array(0).toHex === "function"; }
   );
 
+  check(
+    "Map.prototype.getOrInsertComputed",
+    "pdfjs v5 caches with this. TC39 proposal, not yet in stable Chrome.",
+    function () { return typeof new Map().getOrInsertComputed === "function"; }
+  );
+
   // --- Render results ---
 
   document.getElementById("ua").textContent = navigator.userAgent;
