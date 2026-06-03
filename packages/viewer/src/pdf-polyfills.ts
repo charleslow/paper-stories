@@ -30,3 +30,14 @@ if (!('structuredClone' in globalThis)) {
   (globalThis as { structuredClone?: unknown }).structuredClone =
     (val: unknown) => JSON.parse(JSON.stringify(val));
 }
+
+// Uint8Array.prototype.toHex — Chrome 123+
+// pdfjs v5 uses this for colour/binary data encoding.
+if (!('toHex' in Uint8Array.prototype)) {
+  Object.defineProperty(Uint8Array.prototype, 'toHex', {
+    value: function (this: Uint8Array): string {
+      return Array.from(this, (b) => b.toString(16).padStart(2, '0')).join('');
+    },
+    configurable: true, writable: true,
+  });
+}
