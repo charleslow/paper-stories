@@ -1,6 +1,7 @@
 /// <reference types="vitest/config" />
-import { defineConfig, type Connect } from 'vite'
+import { defineConfig, type Connect, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
+import babel from '@babel/core'
 import path from 'path'
 import fs from 'fs/promises'
 import { readFileSync } from 'fs'
@@ -447,6 +448,35 @@ export default defineConfig({
     format: 'iife',
   },
   plugins: [
+    // Expand the single `import 'core-js'` in pdf-polyfills.ts into exactly the
+    // granular polyfills Chrome 69 lacks (incl. TC39 proposals pdfjs v5 uses,
+    // e.g. Uint8Array.toHex / Map.prototype.getOrInsertComputed). esbuild lowers
+    // syntax but never polyfills built-in methods; @babel/preset-env entry mode
+    // does. Scoped to that one file so we don't run Babel over the whole tree.
+    {
+      name: 'corejs-entry-polyfills',
+      enforce: 'pre',
+      async transform(code: string, id: string) {
+        if (!id.endsWith('/src/pdf-polyfills.ts')) return null
+        const result = await babel.transformAsync(code, {
+          filename: id,
+          babelrc: false,
+          configFile: false,
+          sourceMaps: true,
+          presets: [
+            ['@babel/preset-env', {
+              targets: { chrome: '69' },
+              useBuiltIns: 'entry',
+              corejs: { version: '3.49', proposals: true },
+              modules: false,
+              bugfixes: true,
+            }],
+          ],
+        })
+        if (!result?.code) return null
+        return { code: result.code, map: result.map }
+      },
+    } satisfies Plugin,
     react(),
     {
       name: 'serve-local-stories',
