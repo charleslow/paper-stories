@@ -198,6 +198,12 @@
     return typeof Object.hasOwn === "function";
   });
 
+  check(
+    "Uint8Array.prototype.toHex",
+    "pdfjs v5 uses this for colour/binary encoding. Chrome 123+.",
+    function () { return typeof new Uint8Array(0).toHex === "function"; }
+  );
+
   // --- Render results ---
 
   document.getElementById("ua").textContent = navigator.userAgent;
