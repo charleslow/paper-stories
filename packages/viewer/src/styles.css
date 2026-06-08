@@ -195,6 +195,7 @@
 
 html, body {
   height: 100%;
+  overflow: hidden;
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   background: var(--bg-app);
   color: var(--text-primary);
@@ -202,7 +203,8 @@ html, body {
 }
 
 #root {
-  min-height: 100%;
+  height: 100%;
+  overflow: hidden;
 }
 
 /* ============================================================
