@@ -37,11 +37,25 @@ export function validateStory(story) {
       }
     }
     for (const ex of ch.excerpts) {
-      if (!ex.content || !ex.type || !ex.latexSource) {
-        throw new Error(`Chapter ${ch.id} has excerpt missing content/type/latexSource`);
-      }
-      if (!['text', 'equation', 'figure'].includes(ex.type)) {
+      if (!['text', 'equation', 'figure', 'proof'].includes(ex.type)) {
         throw new Error(`Chapter ${ch.id} has invalid excerpt type: ${ex.type}`);
+      }
+      if (ex.type === 'proof') {
+        if (!ex.statement || typeof ex.statement !== 'string') {
+          throw new Error(`Chapter ${ch.id} has proof excerpt missing statement`);
+        }
+        if (!Array.isArray(ex.steps) || ex.steps.length === 0) {
+          throw new Error(`Chapter ${ch.id} has proof excerpt with no steps`);
+        }
+        for (const step of ex.steps) {
+          if (!step.content || typeof step.content !== 'string') {
+            throw new Error(`Chapter ${ch.id} has proof step missing content`);
+          }
+        }
+        continue;
+      }
+      if (!ex.content || !ex.latexSource) {
+        throw new Error(`Chapter ${ch.id} has excerpt missing content/latexSource`);
       }
       if (ex.visualUrl !== undefined && typeof ex.visualUrl !== 'string') {
         throw new Error(`Chapter ${ch.id} has excerpt with invalid visualUrl`);

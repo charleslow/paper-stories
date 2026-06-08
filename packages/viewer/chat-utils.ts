@@ -32,7 +32,10 @@ const MAX_HISTORY_MESSAGES = 20
 
 export interface ChatChapter {
   label: string
-  excerpts: { latexSource: string; type: string }[]
+  excerpts: Array<
+    { type: 'text' | 'equation' | 'figure'; latexSource: string } |
+    { type: 'proof'; statement: string }
+  >
   explanation: string
 }
 
@@ -75,7 +78,11 @@ export function buildChatPrompt(input: BuildChatPromptInput): string {
   if (currentChapter.excerpts.length > 0) {
     lines.push(`Excerpts from the paper:`)
     for (const e of currentChapter.excerpts) {
-      lines.push(`[${e.type}] ${e.latexSource}`)
+      if (e.type === 'proof') {
+        lines.push(`[proof] ${e.statement}`)
+      } else {
+        lines.push(`[${e.type}] ${e.latexSource}`)
+      }
     }
     lines.push(``)
   }
@@ -123,6 +130,72 @@ export function buildChatPrompt(input: BuildChatPromptInput): string {
   lines.push(`Reader's question: ${message}`)
   lines.push(``)
   lines.push(`Respond concisely. Use $...$ for inline math and $$...$$ for display math.`)
+
+  return lines.join('\n')
+}
+
+export interface BuildProofPromptInput {
+  statement: string
+  title: string
+  currentChapter: { label: string; explanation: string }
+  storyFile: string
+  pdfFile: string | null
+}
+
+export function buildProofPrompt(input: BuildProofPromptInput): string {
+  const { statement, title, currentChapter, storyFile, pdfFile } = input
+  const lines: string[] = []
+
+  lines.push(`You are generating a proof walkthrough chapter for a Paper Stories interactive reader.`)
+  lines.push(``)
+  lines.push(`== Story Context ==`)
+  lines.push(`Paper: "${title}"`)
+  lines.push(`Current chapter: "${currentChapter.label}"`)
+  lines.push(`Chapter explanation:`)
+  lines.push(currentChapter.explanation)
+  lines.push(``)
+  lines.push(`Statement to prove: ${statement}`)
+  lines.push(``)
+  lines.push(`You have access to the Read tool to consult the source material:`)
+  lines.push(`- Full story JSON: ${storyFile}`)
+  if (pdfFile) {
+    lines.push(`- Original paper PDF: ${pdfFile}`)
+  }
+  lines.push(`Read these files as needed to find and faithfully reconstruct the proof.`)
+  lines.push(``)
+  lines.push(`== Instructions ==`)
+  lines.push(`Generate a proof walkthrough chapter. Return ONLY a JSON object wrapped in a \`\`\`json code block — no surrounding text.`)
+  lines.push(``)
+  lines.push(`The proof should:`)
+  lines.push(`- Walk through the proof step by step with 4-10 logical steps`)
+  lines.push(`- Be mathematically rigorous yet pedagogically clear`)
+  lines.push(`- Use KaTeX-compatible LaTeX: $...$ for inline math, $$...$$ for display math`)
+  lines.push(`- Each step is ONE logical move (definition expansion, inequality application, algebraic manipulation, etc.)`)
+  lines.push(`- The \`content\` field of each step: write as a mathematician would — clean, formal, concise`)
+  lines.push(`- The \`explanation\` field of each step: write for a student — WHY this step works, what makes it clever or non-obvious`)
+  lines.push(`- Not every step needs an explanation, but aim to explain at least half the steps`)
+  lines.push(``)
+  lines.push(`== Required JSON format ==`)
+  lines.push(`\`\`\`json`)
+  lines.push(`{`)
+  lines.push(`  "id": "proof-<short-slug>",`)
+  lines.push(`  "label": "Proof: <2-3 word label>",`)
+  lines.push(`  "excerpts": [`)
+  lines.push(`    {`)
+  lines.push(`      "type": "proof",`)
+  lines.push(`      "statement": "<Full theorem/claim being proved, Markdown+KaTeX>",`)
+  lines.push(`      "label": "<e.g. Theorem 3.1 or Lemma 2>",`)
+  lines.push(`      "steps": [`)
+  lines.push(`        {`)
+  lines.push(`          "content": "<One logical step, Markdown+KaTeX>",`)
+  lines.push(`          "explanation": "<Why this step is valid — optional but preferred>"`)
+  lines.push(`        }`)
+  lines.push(`      ]`)
+  lines.push(`    }`)
+  lines.push(`  ],`)
+  lines.push(`  "explanation": "<2-4 sentence overview of proof strategy. What is the key idea? What tools does it use? Markdown+KaTeX.>"`)
+  lines.push(`}`)
+  lines.push(`\`\`\``)
 
   return lines.join('\n')
 }

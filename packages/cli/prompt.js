@@ -82,7 +82,8 @@ Use this to assign \`pdfRegion\` fields to excerpts (see Stage 3 for details).`
 - **Exercises:** If the source contains good exercises, reference them and hint at the approach without giving away the solution.
 - Structure: Overview → Motivation → Definitions (one per chapter) → Key Ideas → Theorems (one per chapter) → Examples → Connections → Summary
 - Per-chapter length: Overview/Summary 200-350 words, Definitions 200-300, Theorems 250-400, Examples 150-250, Others 150-250
-- Excerpts: 1-3 per chapter (first and last chapters have 0). Use multiple when a chapter covers definition + example, or theorem + proof step.`
+- Excerpts: 1-3 per chapter (first and last chapters have 0). Use multiple when a chapter covers definition + example, or theorem + proof step.
+- **Proof excerpts (use sparingly)**: For at most 1-2 chapters where the proof technique *itself* is the key insight (not just the result), you may use a \`proof\` excerpt type. See Stage 3 for the format. If in doubt, skip it — a prose explanation in the chapter's \`explanation\` field is almost always sufficient.`
     : `## Story Mode: Webpage Guide
 
 - Tone: Clear technical guide through the page, using the page's own structure and claims as anchors
@@ -177,6 +178,7 @@ Each excerpt should be one of:
 - **text**: A key paragraph, definition, or claim (may contain inline or display math)
 - **equation**: A PURE mathematical equation or formula — contains ONLY math, no surrounding prose
 - **figure**: A diagram, chart, table, or illustration
+- **proof** *(textbook mode only, at most 1-2 per story)*: A step-by-step proof walkthrough for a theorem whose *proof technique* is the core insight. Use only when the how-it-is-proved matters as much as the result itself. See format below.
 
 **IMPORTANT — choosing between text and equation types:**
 If an excerpt mixes prose with math (e.g., a sentence defining a variable followed by an equation, or a paragraph that includes inline math expressions), it MUST be typed as "text", NOT "equation". The "equation" type is ONLY for excerpts whose entire content is a mathematical expression — no natural-language sentences surrounding it. When in doubt, use "text". The text renderer supports both inline math (\`$...$\`) and display math (\`$$...$$\`), so equations embedded in prose will render correctly as text excerpts.
@@ -215,6 +217,16 @@ For each excerpt, find the matching block(s) in the regions index and add a \`pd
 6. If multiple blocks match (e.g., excerpt spans two blocks), use the first/primary block
 7. If no match is found, omit \`pdfRegion\` for that excerpt (it's optional)
 8. Some figures use vector graphics rather than embedded images — these won't appear as image blocks. That's fine, just omit \`pdfRegion\` for those.
+
+**Proof excerpts** (textbook mode only, at most 1-2 per story — skip unless the proof technique is genuinely the insight):
+- \`type\`: \`"proof"\`
+- \`statement\`: The theorem or claim being proved (Markdown + KaTeX)
+- \`label\`: e.g. \`"Theorem 3.1"\` or \`"Lemma 2"\`
+- \`steps\`: array of 4-10 logical steps, each with:
+  - \`content\`: The proof line itself (Markdown + KaTeX) — one logical move per step (definition expansion, inequality application, algebraic step, etc.)
+  - \`explanation\`: (optional) Why this step is valid — the insight, the tool used, what makes it non-obvious. Write for a student who wants to understand, not just follow along.
+- Proof excerpts have no \`latexSource\`, \`content\`, or \`pdfRegion\` at the top level
+- The chapter's \`explanation\` field should give a brief overview of the proof strategy (2-4 sentences) — readers see this before clicking into individual steps
 
 Guidelines:
 - Prefer excerpts that teach something concrete — definitions, theorem statements, key equations, illuminating examples
@@ -279,6 +291,14 @@ Assemble everything into a single story.json file.
           "visualUrl": "<optional absolute image URL for webpage figure excerpts>",
           "sourceUrl": "<optional webpage URL for webpage excerpts>",
           "pdfRegion": { "page": "<from regions index>", "bbox": ["<x0, y0, x1, y1 from matching block>"] }
+        },
+        {
+          "type": "proof",
+          "statement": "<Theorem or claim being proved — Markdown + KaTeX>",
+          "label": "<e.g. 'Theorem 3.1'>",
+          "steps": [
+            { "content": "<Proof step — Markdown + KaTeX>", "explanation": "<Why this step works — optional>" }
+          ]
         }
       ],
       "explanation": "<Markdown with KaTeX math. Use $...$ for inline, $$...$$ for display.>"
@@ -288,8 +308,8 @@ Assemble everything into a single story.json file.
 \`\`\`
 
 **Validation before writing:**
-1. Every excerpt.latexSource exists ${hasSource ? 'verbatim in the source files' : 'faithfully in the PDF'}
-2. Every excerpt has a non-empty latexSource field
+1. Every non-proof excerpt.latexSource exists ${hasSource ? 'verbatim in the source files' : 'faithfully in the PDF'}
+2. Every non-proof excerpt has a non-empty latexSource field; proof excerpts have statement + steps instead
 2a. authors is an array of strings (or null if genuinely undetectable)
 2b. publishedYear and publishedMonth are integers (or null if genuinely undetectable)
 2c. institutions is an array of unique institution strings (or null if none listed)

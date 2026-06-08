@@ -767,6 +767,236 @@ html, body {
   font-size: 0.8125rem;
 }
 
+/* ============================================================
+   Proof Excerpt
+   ============================================================ */
+
+.excerpt-type-proof {
+  border-color: var(--accent-border);
+}
+
+.proof-statement {
+  padding: 14px 16px;
+  font-size: 0.9375rem;
+  line-height: 1.6;
+  color: var(--text-primary);
+}
+
+.proof-statement p {
+  margin: 0;
+}
+
+.proof-statement .katex-display {
+  margin: 8px 0;
+  overflow-x: auto;
+}
+
+.proof-expand-toggle {
+  display: block;
+  width: 100%;
+  padding: 8px 14px;
+  border: none;
+  border-top: 1px solid var(--border-subtle);
+  background: var(--accent-surface);
+  color: var(--accent-strong);
+  font-size: 0.8125rem;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.proof-expand-toggle:hover {
+  background: rgba(96, 165, 250, 0.15);
+}
+
+.proof-steps {
+  list-style: none;
+  padding: 0;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.proof-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border-subtle);
+  transition: background 0.15s ease;
+}
+
+.proof-step:last-child {
+  border-bottom: none;
+}
+
+.proof-step-clickable {
+  cursor: pointer;
+}
+
+.proof-step-clickable:hover {
+  background: var(--bg-elevated);
+}
+
+.proof-step-selected {
+  background: var(--accent-surface);
+  border-left: 3px solid var(--accent-strong);
+  padding-left: 11px;
+}
+
+.proof-step-selected:hover {
+  background: var(--accent-surface);
+}
+
+.proof-step-number {
+  flex-shrink: 0;
+  min-width: 1.5rem;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  font-family: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
+  padding-top: 2px;
+}
+
+.proof-step-content {
+  flex: 1;
+  font-size: 0.875rem;
+  line-height: 1.6;
+  color: var(--text-secondary);
+  min-width: 0;
+}
+
+.proof-step-content p {
+  margin: 0;
+}
+
+.proof-step-content .katex-display {
+  margin: 4px 0;
+  overflow-x: auto;
+}
+
+.proof-step-indicator {
+  flex-shrink: 0;
+  font-size: 0.625rem;
+  color: var(--accent-muted);
+  padding-top: 4px;
+  opacity: 0.7;
+}
+
+.proof-step-selected .proof-step-indicator {
+  color: var(--accent-strong);
+  opacity: 1;
+}
+
+.proof-qed .proof-step-content {
+  font-style: normal;
+}
+
+.proof-qed-mark {
+  color: var(--text-muted);
+  font-size: 1rem;
+  padding-bottom: 2px;
+}
+
+/* Step explanation header in right panel */
+.proof-step-explanation-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 3rem 0;
+  margin-bottom: -8px;
+}
+
+.proof-step-explanation-label {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: var(--accent-strong);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  background: var(--accent-surface);
+  border: 1px solid var(--accent-border);
+  padding: 3px 10px;
+  border-radius: 9999px;
+}
+
+.proof-step-explanation-back {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  transition: color 0.2s ease;
+  padding: 3px 0;
+}
+
+.proof-step-explanation-back:hover {
+  color: var(--accent-strong);
+}
+
+/* Proof request section in chat panel */
+.proof-request-section {
+  border-top: 1px solid var(--border-subtle);
+  background: var(--bg-secondary);
+}
+
+.proof-request-toggle {
+  display: block;
+  width: 100%;
+  padding: 8px 16px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  text-align: left;
+  cursor: pointer;
+  transition: color 0.2s ease;
+}
+
+.proof-request-toggle:hover {
+  color: var(--accent-strong);
+}
+
+.proof-request-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 0 16px 12px;
+}
+
+.proof-request-input {
+  width: 100%;
+}
+
+.proof-request-success {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 0.8125rem;
+  color: var(--success);
+  padding: 4px 0;
+}
+
+.proof-goto-btn {
+  padding: 5px 12px;
+  background: var(--accent-strong);
+  border: none;
+  border-radius: var(--radius-secondary);
+  color: var(--bg-app);
+  font-weight: 600;
+  font-size: 0.75rem;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.proof-goto-btn:hover {
+  box-shadow: var(--accent-glow);
+}
+
 /* Source toggle */
 .excerpt-source-toggle {
   display: block;

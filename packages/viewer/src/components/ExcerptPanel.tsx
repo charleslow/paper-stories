@@ -2,9 +2,10 @@ import { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
-import { Excerpt } from '../types';
+import { Excerpt, StandardExcerpt } from '../types';
 import MathRenderer from './MathRenderer';
 import PdfRegionViewer from './PdfRegionViewer';
+import ProofExcerptDisplay from './ProofExcerptDisplay';
 
 interface ExcerptPanelProps {
   excerpts: Excerpt[];
@@ -21,9 +22,11 @@ interface ExcerptPanelProps {
     institutions: string[] | null;
     query: string | null;
   };
+  selectedProofStep?: { excerptIndex: number; stepIndex: number } | null;
+  onSelectProofStep?: (info: { excerptIndex: number; stepIndex: number } | null) => void;
 }
 
-export default function ExcerptPanel({ excerpts, pdfUrl, storyMeta }: ExcerptPanelProps) {
+export default function ExcerptPanel({ excerpts, pdfUrl, storyMeta, selectedProofStep = null, onSelectProofStep = () => {} }: ExcerptPanelProps) {
   if (excerpts.length === 0) {
     // Overview/summary chapter — show metadata
     return (
@@ -77,16 +80,32 @@ export default function ExcerptPanel({ excerpts, pdfUrl, storyMeta }: ExcerptPan
 
   return (
     <div className="excerpt-panel">
-      {excerpts.map((excerpt, i) => (
-        <ExcerptCard key={i} excerpt={excerpt} pdfUrl={pdfUrl} />
-      ))}
+      {excerpts.map((excerpt, i) => {
+        if (excerpt.type === 'proof') {
+          return (
+            <ProofExcerptDisplay
+              key={i}
+              excerpt={excerpt}
+              selectedStepIndex={selectedProofStep?.excerptIndex === i ? selectedProofStep.stepIndex : null}
+              onSelectStep={(stepIndex) => {
+                if (stepIndex === null) {
+                  onSelectProofStep(null);
+                } else {
+                  onSelectProofStep({ excerptIndex: i, stepIndex });
+                }
+              }}
+            />
+          );
+        }
+        return <ExcerptCard key={i} excerpt={excerpt} pdfUrl={pdfUrl} />;
+      })}
     </div>
   );
 }
 
 const excerptAllowedElements = ['p', 'span', 'div', 'em', 'strong', 'sub', 'sup', 'br'];
 
-function ExcerptCard({ excerpt, pdfUrl }: { excerpt: Excerpt; pdfUrl?: string }) {
+function ExcerptCard({ excerpt, pdfUrl }: { excerpt: StandardExcerpt; pdfUrl?: string }) {
   const [showSource, setShowSource] = useState(false);
 
   return (

@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { Chapter, Theme } from '../types';
+import { Chapter, ProofExcerpt, Theme } from '../types';
 import ExcerptPanel from './ExcerptPanel';
 import ExplanationPanel from './ExplanationPanel';
 import ChatPanel from './ChatPanel';
@@ -29,6 +29,7 @@ interface ChapterDisplayProps {
   };
   theme: Theme;
   onToggleTheme: () => void;
+  onProofAdded?: (chapterId: string) => void;
 }
 
 export default function ChapterDisplay({
@@ -44,18 +45,44 @@ export default function ChapterDisplay({
   storyMeta,
   theme,
   onToggleTheme,
+  onProofAdded,
 }: ChapterDisplayProps) {
   const [splitPercent, setSplitPercent] = useState(67);
   const [isDragging, setIsDragging] = useState(false);
   const [activeTab, setActiveTab] = useState<'excerpts' | 'explanation' | 'chat'>('explanation');
   const [isMobile, setIsMobile] = useState(false);
+  const [selectedProofStep, setSelectedProofStep] = useState<{
+    excerptIndex: number;
+    stepIndex: number;
+    explanation: string;
+    stepLabel: string;
+  } | null>(null);
   const rightScrollRef = useRef<HTMLDivElement>(null);
   const mobileScrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     rightScrollRef.current?.scrollTo({ top: 0 });
     mobileScrollRef.current?.scrollTo({ top: 0 });
+    setSelectedProofStep(null);
   }, [chapterIndex]);
+
+  const handleSelectProofStep = useCallback((info: { excerptIndex: number; stepIndex: number } | null) => {
+    if (info === null) {
+      setSelectedProofStep(null);
+      return;
+    }
+    const excerpt = chapter.excerpts[info.excerptIndex];
+    if (excerpt.type !== 'proof') return;
+    const proofExcerpt = excerpt as ProofExcerpt;
+    const step = proofExcerpt.steps[info.stepIndex];
+    if (!step?.explanation) return;
+    setSelectedProofStep({
+      excerptIndex: info.excerptIndex,
+      stepIndex: info.stepIndex,
+      explanation: step.explanation,
+      stepLabel: `Step ${info.stepIndex + 1} of ${proofExcerpt.steps.length}`,
+    });
+  }, [chapter.excerpts]);
 
   // Detect mobile
   useEffect(() => {
@@ -154,23 +181,41 @@ export default function ChapterDisplay({
       {isMobile ? (
         <div className="chapter-panels-mobile" ref={mobileScrollRef}>
           {activeTab === 'excerpts' ? (
-            <ExcerptPanel excerpts={chapter.excerpts} pdfUrl={pdfUrl} storyMeta={storyMeta} />
+            <ExcerptPanel
+              excerpts={chapter.excerpts}
+              pdfUrl={pdfUrl}
+              storyMeta={storyMeta}
+              selectedProofStep={selectedProofStep}
+              onSelectProofStep={handleSelectProofStep}
+            />
           ) : activeTab === 'chat' && chatAvailable ? (
             <div className="chat-panel-fullscreen">
               <ChatPanel
                 storyId={storyId}
                 chapterId={chapter.id}
                 chatProvider={chatProvider}
+                onProofAdded={onProofAdded}
               />
             </div>
           ) : (
-            <ExplanationPanel explanation={chapter.explanation} />
+            <ExplanationPanel
+              explanation={chapter.explanation}
+              proofStepExplanation={selectedProofStep?.explanation}
+              proofStepLabel={selectedProofStep?.stepLabel}
+              onClearProofStep={() => setSelectedProofStep(null)}
+            />
           )}
         </div>
       ) : (
         <div className={`chapter-panels ${isDragging ? 'dragging' : ''}`}>
           <div className="panel-left" style={{ width: `${splitPercent}%` }}>
-            <ExcerptPanel excerpts={chapter.excerpts} pdfUrl={pdfUrl} storyMeta={storyMeta} />
+            <ExcerptPanel
+              excerpts={chapter.excerpts}
+              pdfUrl={pdfUrl}
+              storyMeta={storyMeta}
+              selectedProofStep={selectedProofStep}
+              onSelectProofStep={handleSelectProofStep}
+            />
           </div>
           <div
             className="panel-splitter"
@@ -178,12 +223,18 @@ export default function ChapterDisplay({
           />
           <div className="panel-right" style={{ width: `${100 - splitPercent}%` }}>
             <div className="panel-right-scroll" ref={rightScrollRef}>
-              <ExplanationPanel explanation={chapter.explanation} />
+              <ExplanationPanel
+                explanation={chapter.explanation}
+                proofStepExplanation={selectedProofStep?.explanation}
+                proofStepLabel={selectedProofStep?.stepLabel}
+                onClearProofStep={() => setSelectedProofStep(null)}
+              />
               {chatAvailable && (
                 <ChatPanel
                   storyId={storyId}
                   chapterId={chapter.id}
                   chatProvider={chatProvider}
+                  onProofAdded={onProofAdded}
                 />
               )}
             </div>

@@ -11,7 +11,7 @@ type AppState =
   | { status: 'landing' }
   | { status: 'loading'; url: string }
   | { status: 'error'; message: string }
-  | { status: 'ready'; story: Story; currentChapter: number; pdfUrl: string | null; chatAvailable: boolean; chatProvider: string | null };
+  | { status: 'ready'; story: Story; storyUrl: string; currentChapter: number; pdfUrl: string | null; chatAvailable: boolean; chatProvider: string | null };
 
 function useTheme() {
   const [theme, setTheme] = useState<Theme>(() => {
@@ -49,7 +49,7 @@ export default function App() {
           // Per-story chatModel (written at generation time) takes precedence over
           // the server's startup config so the label always matches the backend route.
           const chatProvider = providerFromModel(story.chatModel) ?? chat.provider;
-          setState({ status: 'ready', story, currentChapter: 0, pdfUrl, chatAvailable: chat.available, chatProvider });
+          setState({ status: 'ready', story, storyUrl, currentChapter: 0, pdfUrl, chatAvailable: chat.available, chatProvider });
           recordStoryView(storyUrl, story);
         })
         .catch(err => {
@@ -65,6 +65,25 @@ export default function App() {
       return { ...prev, currentChapter: clamped };
     });
   }, []);
+
+  const handleProofAdded = useCallback(async (newChapterId: string) => {
+    if (state.status !== 'ready') return;
+    const currentState = state;
+    try {
+      const updatedStory = await fetchStory(currentState.storyUrl);
+      const newIndex = updatedStory.chapters.findIndex(c => c.id === newChapterId);
+      setState(prev => {
+        if (prev.status !== 'ready') return prev;
+        return {
+          ...prev,
+          story: updatedStory,
+          currentChapter: newIndex >= 0 ? newIndex : prev.currentChapter,
+        };
+      });
+    } catch {
+      // Story re-fetch failed — user can navigate manually via sidebar
+    }
+  }, [state]);
 
   // Keyboard navigation
   useEffect(() => {
@@ -163,6 +182,7 @@ export default function App() {
         }}
         theme={theme}
         onToggleTheme={toggleTheme}
+        onProofAdded={handleProofAdded}
       />
     </div>
   );
