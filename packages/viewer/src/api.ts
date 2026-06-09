@@ -146,6 +146,29 @@ export async function sendChatMessage(
   return data.reply;
 }
 
+export async function requestProof(
+  storyId: string,
+  chapterId: string,
+  statement: string,
+): Promise<{ chapterId: string }> {
+  const res = await fetch(
+    `/local-stories/_proof/${encodeURIComponent(storyId)}/${encodeURIComponent(chapterId)}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ statement }),
+    },
+  );
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: 'Proof request failed' }));
+    throw new Error(err.error || 'Proof request failed');
+  }
+
+  const data = await res.json();
+  return { chapterId: data.chapterId };
+}
+
 function validateStory(data: unknown): asserts data is Story {
   const story = data as Record<string, unknown>;
 

@@ -7,7 +7,8 @@ import fs from 'fs/promises'
 import { readFileSync } from 'fs'
 import { spawn, spawnSync } from 'child_process'
 import type { ServerResponse } from 'http'
-import { isSafeId, readBody, buildChatPrompt, withFileLock } from './chat-utils'
+import { isSafeId, readBody, buildChatPrompt, buildProofPrompt, withFileLock } from './chat-utils'
+import { validateProofExcerpt } from '../cli/validate.js'
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 import yaml from 'js-yaml'
 
@@ -235,16 +236,22 @@ async function resolveStoryFilename(storiesDir: string, storyId: string): Promis
   throw new Error(`Story not found: ${storyId}`)
 }
 
+type StoryChapterExcerpt =
+  | { type: 'text' | 'equation' | 'figure'; latexSource: string }
+  | { type: 'proof'; statement: string }
+
+interface StoryFileData {
+  title: string
+  arxivId: string
+  chatModel?: string | null
+  chapters: { id: string; label: string; excerpts: StoryChapterExcerpt[]; explanation: string }[]
+}
+
 async function readStoryFile(storiesDir: string, storyId: string) {
   const filename = await resolveStoryFilename(storiesDir, storyId)
   const storyPath = path.join(storiesDir, `${filename}.json`)
   const data = JSON.parse(await fs.readFile(storyPath, 'utf-8'))
-  return { filename, data: data as {
-    title: string
-    arxivId: string
-    chatModel?: string | null
-    chapters: { id: string; label: string; excerpts: { latexSource: string; type: string }[]; explanation: string }[]
-  }}
+  return { filename, data: data as StoryFileData }
 }
 
 async function handleRequest(req: Connect.IncomingMessage, res: ServerResponse, next: Connect.NextFunction, storiesDir: string) {
@@ -358,6 +365,105 @@ async function handleRequest(req: Connect.IncomingMessage, res: ServerResponse, 
       return jsonResponse(res, { reply: aiReply })
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Chat failed'
+      return jsonResponse(res, { error: message }, 500)
+    } finally {
+      activeChatRequests--
+    }
+  }
+
+  // Proof generation: POST /_proof/:storyId/:chapterId
+  const proofPostMatch = req.url?.match(/^\/_proof\/([^/]+)\/([^/]+)$/)
+  if (proofPostMatch && req.method === 'POST') {
+    const storyId = decodeURIComponent(proofPostMatch[1])
+    const chapterId = decodeURIComponent(proofPostMatch[2])
+    if (!isSafeId(storyId) || !isSafeId(chapterId)) {
+      return jsonResponse(res, { error: 'Invalid story or chapter ID' }, 400)
+    }
+
+    if (activeChatRequests >= MAX_CONCURRENT_CHATS) {
+      return jsonResponse(res, { error: 'Too many concurrent requests. Please wait.' }, 429)
+    }
+
+    activeChatRequests++
+    try {
+      const body = JSON.parse(await readBody(req))
+      if (!body.statement || typeof body.statement !== 'string' || body.statement.length > 2000) {
+        return jsonResponse(res, { error: 'Invalid or missing statement' }, 400)
+      }
+
+      const { filename, data: story } = await readStoryFile(storiesDir, storyId)
+      const storyPath = path.join(storiesDir, `${filename}.json`)
+      const chapterIdx = story.chapters.findIndex(c => c.id === chapterId)
+      if (chapterIdx === -1) {
+        return jsonResponse(res, { error: 'Chapter not found' }, 404)
+      }
+
+      const currentChapter = story.chapters[chapterIdx]
+      const pdfCandidate = path.join(storiesDir, `${filename}.pdf`)
+      let pdfFile: string | null = null
+      try { await fs.access(pdfCandidate); pdfFile = pdfCandidate } catch {}
+
+      const prompt = buildProofPrompt({
+        statement: body.statement,
+        title: story.title,
+        currentChapter: { label: currentChapter.label, explanation: currentChapter.explanation },
+        storyFile: storyPath,
+        pdfFile,
+      })
+
+      const aiResponse = await runChat(prompt, storiesDir, story.chatModel)
+
+      const jsonMatch = aiResponse.match(/```json\s*([\s\S]*?)\s*```/)
+      if (!jsonMatch) {
+        console.error('[proof] AI response did not contain a JSON block:', aiResponse.slice(0, 200))
+        return jsonResponse(res, { error: 'Failed to generate proof: unexpected AI response format' }, 500)
+      }
+
+      let proofChapter: Record<string, unknown>
+      try {
+        proofChapter = JSON.parse(jsonMatch[1])
+      } catch {
+        return jsonResponse(res, { error: 'Failed to parse generated proof JSON' }, 500)
+      }
+
+      if (!proofChapter.id || !proofChapter.label || !proofChapter.explanation || !Array.isArray(proofChapter.excerpts)) {
+        return jsonResponse(res, { error: 'Generated proof chapter has invalid structure' }, 500)
+      }
+
+      // Validate each excerpt against the same proof shape validateStory enforces,
+      // so a malformed AI response never persists a chapter the viewer crashes on.
+      try {
+        for (const ex of proofChapter.excerpts as { type?: unknown }[]) {
+          if (ex.type !== 'proof') {
+            throw new Error('proof chapter excerpt is not type "proof"')
+          }
+          validateProofExcerpt(ex, String(proofChapter.id))
+        }
+      } catch (e) {
+        const detail = e instanceof Error ? e.message : 'malformed proof'
+        return jsonResponse(res, { error: `Generated proof is malformed: ${detail}` }, 500)
+      }
+
+      let chaptId = String(proofChapter.id)
+      await withFileLock(storyPath, async () => {
+        const freshStory = JSON.parse(await fs.readFile(storyPath, 'utf-8'))
+        // Recheck for id collisions against the freshly-read chapters: a concurrent
+        // request may have appended this same generated id since the pre-lock read.
+        if (freshStory.chapters.some((c: { id: string }) => c.id === chaptId)) {
+          chaptId = `${chaptId}-${Date.now()}`
+          proofChapter.id = chaptId
+        }
+        freshStory.chapters.push(proofChapter)
+        const tmpPath = storyPath + '.tmp'
+        await fs.writeFile(tmpPath, JSON.stringify(freshStory, null, 2))
+        await fs.rename(tmpPath, storyPath)
+      })
+
+      console.log('[proof] appended chapter', chaptId, 'to', filename)
+      return jsonResponse(res, { type: 'proof_added', chapterId: chaptId })
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Proof generation failed'
+      console.error('[proof] error:', message)
       return jsonResponse(res, { error: message }, 500)
     } finally {
       activeChatRequests--

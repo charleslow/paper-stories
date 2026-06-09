@@ -4,21 +4,37 @@ import rehypeKatex from 'rehype-katex';
 
 interface ExplanationPanelProps {
   explanation: string;
+  proofStepExplanation?: string | null;
+  proofStepLabel?: string | null;
+  onClearProofStep?: () => void;
 }
 
-/**
- * Renders chapter explanations as Markdown with KaTeX math support.
- * Supports $...$ for inline math and $$...$$ for display math.
- */
-export default function ExplanationPanel({ explanation }: ExplanationPanelProps) {
+export default function ExplanationPanel({
+  explanation,
+  proofStepExplanation,
+  proofStepLabel,
+  onClearProofStep,
+}: ExplanationPanelProps) {
+  const content = proofStepExplanation ?? explanation;
+
   return (
     <div className="explanation-panel">
+      {proofStepExplanation && (
+        <div className="proof-step-explanation-header">
+          <span className="proof-step-explanation-label">
+            {proofStepLabel ?? 'Step explanation'}
+          </span>
+          <button className="proof-step-explanation-back" onClick={onClearProofStep}>
+            ← Chapter overview
+          </button>
+        </div>
+      )}
       <div className="explanation-content">
         <ReactMarkdown
           remarkPlugins={[remarkMath]}
           rehypePlugins={[rehypeKatex]}
         >
-          {explanation}
+          {content}
         </ReactMarkdown>
       </div>
     </div>

@@ -3,17 +3,31 @@ export interface PdfRegion {
   bbox: [number, number, number, number]; // Normalized [x0, y0, x1, y1] in range [0, 1]
 }
 
-export interface Excerpt {
+export interface StandardExcerpt {
   content: string;
   latexSource: string;
   type: 'text' | 'equation' | 'figure';
   sourceFile: string;
   label: string;
-  pdfRegion?: PdfRegion;  // Optional PDF bounding box for the excerpt
-  visualUrl?: string;      // Optional webpage image/diagram URL for figure excerpts
+  pdfRegion?: PdfRegion;
+  visualUrl?: string;
   visualAlt?: string;
   sourceUrl?: string;
 }
+
+export interface ProofStep {
+  content: string;       // Markdown + KaTeX (prose, math, or both)
+  explanation?: string;  // Shown in right panel when step is selected
+}
+
+export interface ProofExcerpt {
+  type: 'proof';
+  statement: string;     // The theorem/claim being proved (Markdown + KaTeX)
+  label: string;         // e.g. "Theorem 3.1"
+  steps: ProofStep[];
+}
+
+export type Excerpt = StandardExcerpt | ProofExcerpt;
 
 export interface Chapter {
   id: string;
