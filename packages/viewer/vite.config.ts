@@ -8,6 +8,7 @@ import { readFileSync } from 'fs'
 import { spawn, spawnSync } from 'child_process'
 import type { ServerResponse } from 'http'
 import { isSafeId, readBody, buildChatPrompt, buildProofPrompt, withFileLock } from './chat-utils'
+import { validateProofExcerpt } from '../cli/validate.js'
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 import yaml from 'js-yaml'
 
@@ -429,16 +430,29 @@ async function handleRequest(req: Connect.IncomingMessage, res: ServerResponse, 
         return jsonResponse(res, { error: 'Generated proof chapter has invalid structure' }, 500)
       }
 
-      // Ensure unique ID to avoid collisions on repeated proof requests
-      const existingIds = new Set(story.chapters.map(c => c.id))
-      let chaptId = String(proofChapter.id)
-      if (existingIds.has(chaptId)) {
-        chaptId = `${chaptId}-${Date.now()}`
-        proofChapter.id = chaptId
+      // Validate each excerpt against the same proof shape validateStory enforces,
+      // so a malformed AI response never persists a chapter the viewer crashes on.
+      try {
+        for (const ex of proofChapter.excerpts as { type?: unknown }[]) {
+          if (ex.type !== 'proof') {
+            throw new Error('proof chapter excerpt is not type "proof"')
+          }
+          validateProofExcerpt(ex, String(proofChapter.id))
+        }
+      } catch (e) {
+        const detail = e instanceof Error ? e.message : 'malformed proof'
+        return jsonResponse(res, { error: `Generated proof is malformed: ${detail}` }, 500)
       }
 
+      let chaptId = String(proofChapter.id)
       await withFileLock(storyPath, async () => {
         const freshStory = JSON.parse(await fs.readFile(storyPath, 'utf-8'))
+        // Recheck for id collisions against the freshly-read chapters: a concurrent
+        // request may have appended this same generated id since the pre-lock read.
+        if (freshStory.chapters.some((c: { id: string }) => c.id === chaptId)) {
+          chaptId = `${chaptId}-${Date.now()}`
+          proofChapter.id = chaptId
+        }
         freshStory.chapters.push(proofChapter)
         const tmpPath = storyPath + '.tmp'
         await fs.writeFile(tmpPath, JSON.stringify(freshStory, null, 2))

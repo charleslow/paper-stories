@@ -1,4 +1,25 @@
 /**
+ * Validates a single proof excerpt's shape. Throws if invalid.
+ *
+ * Shared so server-side proof generation can enforce the same shape the
+ * viewer's ProofExcerptDisplay relies on (statement string + non-empty
+ * steps array, each step with string content) before persisting a chapter.
+ */
+export function validateProofExcerpt(ex, chapterId) {
+  if (!ex.statement || typeof ex.statement !== 'string') {
+    throw new Error(`Chapter ${chapterId} has proof excerpt missing statement`);
+  }
+  if (!Array.isArray(ex.steps) || ex.steps.length === 0) {
+    throw new Error(`Chapter ${chapterId} has proof excerpt with no steps`);
+  }
+  for (const step of ex.steps) {
+    if (!step.content || typeof step.content !== 'string') {
+      throw new Error(`Chapter ${chapterId} has proof step missing content`);
+    }
+  }
+}
+
+/**
  * Validates a story JSON object. Throws if invalid.
  *
  * arxivId and arxivUrl are optional (may be null for local sources).
@@ -41,17 +62,7 @@ export function validateStory(story) {
         throw new Error(`Chapter ${ch.id} has invalid excerpt type: ${ex.type}`);
       }
       if (ex.type === 'proof') {
-        if (!ex.statement || typeof ex.statement !== 'string') {
-          throw new Error(`Chapter ${ch.id} has proof excerpt missing statement`);
-        }
-        if (!Array.isArray(ex.steps) || ex.steps.length === 0) {
-          throw new Error(`Chapter ${ch.id} has proof excerpt with no steps`);
-        }
-        for (const step of ex.steps) {
-          if (!step.content || typeof step.content !== 'string') {
-            throw new Error(`Chapter ${ch.id} has proof step missing content`);
-          }
-        }
+        validateProofExcerpt(ex, ch.id);
         continue;
       }
       if (!ex.content || !ex.latexSource) {
