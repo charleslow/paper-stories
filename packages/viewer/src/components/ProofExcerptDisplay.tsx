@@ -10,11 +10,9 @@ interface ProofExcerptDisplayProps {
   onSelectStep: (index: number | null) => void;
 }
 
-const mdPlugins = { remark: [remarkMath], rehype: [rehypeKatex] };
-
 function ProofMd({ children }: { children: string }) {
   return (
-    <ReactMarkdown remarkPlugins={mdPlugins.remark} rehypePlugins={mdPlugins.rehype}>
+    <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
       {children}
     </ReactMarkdown>
   );

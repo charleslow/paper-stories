@@ -51,12 +51,7 @@ export default function ChapterDisplay({
   const [isDragging, setIsDragging] = useState(false);
   const [activeTab, setActiveTab] = useState<'excerpts' | 'explanation' | 'chat'>('explanation');
   const [isMobile, setIsMobile] = useState(false);
-  const [selectedProofStep, setSelectedProofStep] = useState<{
-    excerptIndex: number;
-    stepIndex: number;
-    explanation: string;
-    stepLabel: string;
-  } | null>(null);
+  const [selectedProofStep, setSelectedProofStep] = useState<{ excerptIndex: number; stepIndex: number } | null>(null);
   const rightScrollRef = useRef<HTMLDivElement>(null);
   const mobileScrollRef = useRef<HTMLDivElement>(null);
 
@@ -66,23 +61,18 @@ export default function ChapterDisplay({
     setSelectedProofStep(null);
   }, [chapterIndex]);
 
-  const handleSelectProofStep = useCallback((info: { excerptIndex: number; stepIndex: number } | null) => {
-    if (info === null) {
-      setSelectedProofStep(null);
-      return;
-    }
-    const excerpt = chapter.excerpts[info.excerptIndex];
-    if (excerpt.type !== 'proof') return;
-    const proofExcerpt = excerpt as ProofExcerpt;
-    const step = proofExcerpt.steps[info.stepIndex];
-    if (!step?.explanation) return;
-    setSelectedProofStep({
-      excerptIndex: info.excerptIndex,
-      stepIndex: info.stepIndex,
-      explanation: step.explanation,
-      stepLabel: `Step ${info.stepIndex + 1} of ${proofExcerpt.steps.length}`,
-    });
-  }, [chapter.excerpts]);
+  // Derive the selected step's explanation/label from the indices rather than
+  // duplicating them in state. ProofExcerptDisplay only selects steps that have
+  // an explanation, so an absent one here resolves to the chapter overview.
+  const proofStepDetail = (() => {
+    if (!selectedProofStep) return null;
+    const excerpt = chapter.excerpts[selectedProofStep.excerptIndex];
+    if (excerpt?.type !== 'proof') return null;
+    const steps = (excerpt as ProofExcerpt).steps;
+    const explanation = steps[selectedProofStep.stepIndex]?.explanation;
+    if (!explanation) return null;
+    return { explanation, label: `Step ${selectedProofStep.stepIndex + 1} of ${steps.length}` };
+  })();
 
   // Detect mobile
   useEffect(() => {
@@ -186,7 +176,7 @@ export default function ChapterDisplay({
               pdfUrl={pdfUrl}
               storyMeta={storyMeta}
               selectedProofStep={selectedProofStep}
-              onSelectProofStep={handleSelectProofStep}
+              onSelectProofStep={setSelectedProofStep}
             />
           ) : activeTab === 'chat' && chatAvailable ? (
             <div className="chat-panel-fullscreen">
@@ -200,8 +190,8 @@ export default function ChapterDisplay({
           ) : (
             <ExplanationPanel
               explanation={chapter.explanation}
-              proofStepExplanation={selectedProofStep?.explanation}
-              proofStepLabel={selectedProofStep?.stepLabel}
+              proofStepExplanation={proofStepDetail?.explanation}
+              proofStepLabel={proofStepDetail?.label}
               onClearProofStep={() => setSelectedProofStep(null)}
             />
           )}
@@ -214,7 +204,7 @@ export default function ChapterDisplay({
               pdfUrl={pdfUrl}
               storyMeta={storyMeta}
               selectedProofStep={selectedProofStep}
-              onSelectProofStep={handleSelectProofStep}
+              onSelectProofStep={setSelectedProofStep}
             />
           </div>
           <div
@@ -225,8 +215,8 @@ export default function ChapterDisplay({
             <div className="panel-right-scroll" ref={rightScrollRef}>
               <ExplanationPanel
                 explanation={chapter.explanation}
-                proofStepExplanation={selectedProofStep?.explanation}
-                proofStepLabel={selectedProofStep?.stepLabel}
+                proofStepExplanation={proofStepDetail?.explanation}
+                proofStepLabel={proofStepDetail?.label}
                 onClearProofStep={() => setSelectedProofStep(null)}
               />
               {chatAvailable && (
