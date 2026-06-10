@@ -52,21 +52,23 @@ export async function fetchStory(url: string): Promise<Story> {
   }
 }
 
+/** HEAD-probe a URL; true if it resolves to an existing resource. */
+async function pdfExists(url: string): Promise<boolean> {
+  try {
+    const response = await fetch(url, { method: 'HEAD' });
+    return response.ok;
+  } catch {
+    return false; // PDF not available
+  }
+}
+
 /**
  * Check if a PDF exists alongside the story JSON (same path, .pdf extension).
  * Returns the PDF URL if it exists, or null.
  */
 export async function resolvePdfUrl(storyUrl: string): Promise<string | null> {
   const pdfUrl = storyUrl.replace(/\.json$/, '.pdf');
-  try {
-    const response = await fetch(pdfUrl, { method: 'HEAD' });
-    if (response.ok) {
-      return pdfUrl;
-    }
-  } catch {
-    // PDF not available
-  }
-  return null;
+  return (await pdfExists(pdfUrl)) ? pdfUrl : null;
 }
 
 /**
@@ -85,13 +87,7 @@ export async function resolveSourcePdfUrls(
     sources.map(async (s): Promise<[string, string] | null> => {
       if (!s.pdfFile) return null;
       const url = baseDir + s.pdfFile;
-      try {
-        const res = await fetch(url, { method: 'HEAD' });
-        if (res.ok) return [s.id, url];
-      } catch {
-        // PDF not available
-      }
-      return null;
+      return (await pdfExists(url)) ? [s.id, url] : null;
     }),
   );
   return Object.fromEntries(entries.filter((e): e is [string, string] => e !== null));

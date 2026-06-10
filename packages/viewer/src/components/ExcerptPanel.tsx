@@ -15,6 +15,18 @@ function sourceColor(index: number): string {
   return SOURCE_COLORS[index % SOURCE_COLORS.length];
 }
 
+// "March 2026" / "Mar 2026" / "2026" / "" depending on what is known.
+function formatMonthYear(
+  year: number | null | undefined,
+  month: number | null | undefined,
+  monthStyle: 'long' | 'short',
+): string {
+  if (!year) return '';
+  if (!month) return `${year}`;
+  const name = new Date(year, month - 1).toLocaleString('en-US', { month: monthStyle });
+  return `${name} ${year}`;
+}
+
 interface ExcerptPanelProps {
   excerpts: Excerpt[];
   pdfUrl?: string;
@@ -56,9 +68,7 @@ export default function ExcerptPanel({ excerpts, pdfUrl, sourcePdfUrls, sources,
             )}
             {(storyMeta.publishedYear || storyMeta.publishedMonth) && (
               <div className="meta-published">
-                {storyMeta.publishedMonth && storyMeta.publishedYear
-                  ? `${new Date(storyMeta.publishedYear, storyMeta.publishedMonth - 1).toLocaleString('en-US', { month: 'long' })} ${storyMeta.publishedYear}`
-                  : storyMeta.publishedYear ?? ''}
+                {formatMonthYear(storyMeta.publishedYear, storyMeta.publishedMonth, 'long')}
               </div>
             )}
             {storyMeta.institutions && storyMeta.institutions.length > 0 && (
@@ -113,7 +123,8 @@ export default function ExcerptPanel({ excerpts, pdfUrl, sourcePdfUrls, sources,
             />
           );
         }
-        const info = excerpt.sourceId ? sourceInfo.get(excerpt.sourceId) : undefined;
+        // Source attribution (badge + border color) only applies to collections.
+        const info = isCollection && excerpt.sourceId ? sourceInfo.get(excerpt.sourceId) : undefined;
         const effectivePdfUrl =
           (excerpt.sourceId && sourcePdfUrls?.[excerpt.sourceId]) || pdfUrl;
         return (
@@ -121,8 +132,8 @@ export default function ExcerptPanel({ excerpts, pdfUrl, sourcePdfUrls, sources,
             key={i}
             excerpt={excerpt}
             pdfUrl={effectivePdfUrl}
-            source={isCollection ? info?.source : undefined}
-            sourceColor={info ? sourceColor(info.index) : undefined}
+            source={info?.source}
+            sourceColor={info && sourceColor(info.index)}
           />
         );
       })}
@@ -138,11 +149,7 @@ function SourcesSummary({ sources }: { sources: Source[] }) {
       <p className="sources-summary-sub">This story draws on {sources.length} sources:</p>
       <ol className="sources-summary-list">
         {sources.map((source, index) => {
-          const date = source.publishedYear
-            ? source.publishedMonth
-              ? `${new Date(source.publishedYear, source.publishedMonth - 1).toLocaleString('en-US', { month: 'short' })} ${source.publishedYear}`
-              : `${source.publishedYear}`
-            : null;
+          const date = formatMonthYear(source.publishedYear, source.publishedMonth, 'short');
           return (
             <li key={source.id} className="sources-summary-item">
               <span className="source-dot" style={{ background: sourceColor(index) }} />

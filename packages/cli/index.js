@@ -352,20 +352,20 @@ async function generateCollectionStory(options) {
   const generationDir = join(workDir, 'generation');
   mkdirSync(generationDir, { recursive: true });
 
-  // Prepare each source into its own subdirectory and extract per-PDF regions.
-  const sources = [];
-  for (let i = 0; i < options.source.length; i++) {
-    const id = `s${i + 1}`;
-    const spec = options.source[i];
-    console.log(`📥 Preparing source ${id}: ${spec}`);
-    const sourceWorkDir = join(workDir, 'sources', id);
-    const prepared = await prepareCollectionSource(spec, id, sourceWorkDir);
-    if (prepared.pdfPath) {
-      console.log(`📐 Extracting PDF text regions for ${id}...`);
-      const regionsPath = join(sourceWorkDir, 'regions.json');
-      if (extractPdfRegions(prepared.pdfPath, regionsPath)) prepared.regionsPath = regionsPath;
-    }
-    sources.push(prepared);
+  // Fetch every source into its own subdirectory in parallel (downloads are the
+  // slow, independent part). Region extraction is a synchronous subprocess, so
+  // run it afterwards in order to keep its logging readable.
+  console.log(`📥 Preparing ${options.source.length} sources...`);
+  const sources = await Promise.all(
+    options.source.map((spec, i) =>
+      prepareCollectionSource(spec, `s${i + 1}`, join(workDir, 'sources', `s${i + 1}`)),
+    ),
+  );
+  for (const prepared of sources) {
+    if (!prepared.pdfPath) continue;
+    console.log(`📐 Extracting PDF text regions for ${prepared.id}...`);
+    const regionsPath = join(workDir, 'sources', prepared.id, 'regions.json');
+    if (extractPdfRegions(prepared.pdfPath, regionsPath)) prepared.regionsPath = regionsPath;
   }
 
   if (!sources.some(s => s.hasSource || s.pdfPath)) {

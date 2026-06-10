@@ -44,13 +44,11 @@ export default function App() {
     const { storyUrl } = parseStoryUrl();
     if (storyUrl) {
       setState({ status: 'loading', url: storyUrl });
-      fetchStory(storyUrl)
-        .then(async (story) => {
-          const [pdfUrl, sourcePdfUrls, chat] = await Promise.all([
-            resolvePdfUrl(storyUrl),
-            resolveSourcePdfUrls(storyUrl, story),
-            checkChatAvailable(),
-          ]);
+      // The story-independent requests don't need to wait on the story fetch, so
+      // fire all three together. Per-source PDFs need the story, so resolve after.
+      Promise.all([fetchStory(storyUrl), resolvePdfUrl(storyUrl), checkChatAvailable()])
+        .then(async ([story, pdfUrl, chat]) => {
+          const sourcePdfUrls = await resolveSourcePdfUrls(storyUrl, story);
           // Per-story chatModel (written at generation time) takes precedence over
           // the server's startup config so the label always matches the backend route.
           const chatProvider = providerFromModel(story.chatModel) ?? chat.provider;
