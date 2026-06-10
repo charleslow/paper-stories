@@ -9,6 +9,198 @@
  * - Textbook chapters → slower pedagogical walkthrough, 30-40 chapters
  */
 
+/**
+ * Build the generation prompt for a multi-source ("collection") story that
+ * weaves together several papers / PDFs / webpages and cites all of them.
+ *
+ * Drives the SAME six stages and checkpoint markers as buildPrompt() so the
+ * pipeline in index.js can run it stage-by-stage unchanged. The key
+ * differences from single-source mode:
+ *   - a top-level `sources` array is emitted (summarized "at the front")
+ *   - every excerpt carries a `sourceId` tying it back to one source
+ *   - each source has its own files, PDF, and regions index; `pdfRegion.page`
+ *     is relative to that source's PDF
+ *
+ * @param {Object}   args
+ * @param {Array}    args.sources       - per-source descriptors (see index.js)
+ * @param {string}   [args.query]
+ * @param {string}   args.generationDir
+ */
+export function buildCollectionPrompt({ sources, query, generationDir }) {
+  const sourceBlocks = sources.map((s, i) => {
+    const lines = [`### Source ${i + 1} — id: \`${s.id}\` (type: ${s.type})`];
+    if (s.arxivId) lines.push(`- arXiv ID: ${s.arxivId}`);
+    if (s.sourceUrl || s.arxivUrl) lines.push(`- URL: ${s.sourceUrl || s.arxivUrl}`);
+    if (s.title) lines.push(`- Title hint: ${s.title}`);
+    if (s.type === 'webpage') {
+      lines.push(`- Webpage bundle dir: ${s.sourceDir} (read page.md, page-metadata.json, page.html)`);
+    } else if (s.hasSource) {
+      lines.push(`- LaTeX source dir: ${s.sourceDir} (PRIMARY — Glob/Read/Grep the .tex files)`);
+    }
+    if (s.pdfPath) {
+      lines.push(`- PDF: ${s.pdfPath}${s.hasSource ? ' (SECONDARY — figures/tables context)' : ' (PRIMARY source)'}`);
+    }
+    if (s.regionsPath) {
+      lines.push(`- PDF regions index: ${s.regionsPath} (text + image blocks with normalized bboxes; pages are relative to THIS source's PDF)`);
+    }
+    if (!s.hasSource && s.type !== 'webpage' && !s.pdfPath) {
+      lines.push('- (no readable source files were available for this entry)');
+    }
+    return lines.join('\n');
+  }).join('\n\n');
+
+  const idList = sources.map(s => `\`${s.id}\``).join(', ');
+
+  return `You are a Paper Stories generator working in MULTI-SOURCE mode. Your job is to create a single,
+coherent walkthrough that synthesizes and cross-references SEVERAL sources, citing each one.
+
+## Story Mode: Collection (multiple sources)
+
+- Tone: A knowledgeable colleague guiding the reader across a set of related sources — drawing
+  connections, contrasts, and a throughline that no single source provides on its own.
+- The story is NOT a sequence of independent summaries. Build one narrative that braids the sources
+  together: introduce a problem, then pull the relevant idea/equation/result from whichever source
+  addresses it, comparing and contrasting as you go.
+- Pace: 12-25 chapters depending on how many sources there are and their density.
+- Structure: Overview (introduce ALL sources and the throughline) → shared background → each major
+  theme/idea (pulling excerpts from whichever sources are relevant) → comparisons/tensions between
+  sources → synthesis → Summary.
+- Per-chapter length: Overview/Summary 250-400 words, others 150-300 words.
+- Excerpts: 1-3 per chapter (first and last chapters have 0). A chapter MAY mix excerpts from
+  different sources when comparing them.
+
+## Sources
+You are given ${sources.length} sources. Use EXACTLY these ids (${idList}) — do not invent new ids.
+Every excerpt you collect MUST be tagged with the \`sourceId\` of the source it came from.
+
+${sourceBlocks}
+
+- User query: ${query || '(none — synthesize a comprehensive cross-source deep-dive)'}
+
+## Generation Directory
+Write all intermediate and final files to: ${generationDir}
+
+## CRITICAL RULE: NO HALLUCINATION
+Every excerpt you include MUST be grounded in ONE specific source's files.
+- \`latexSource\` must be copied VERBATIM from that source — character for character (for webpages, the
+  raw quote from page.md or page.html; for PDF-only sources, faithfully transcribed from the PDF).
+- Text excerpts: \`content\` is the exact quote with LaTeX artifacts cleaned (drop \\cite/\\ref/\\label,
+  KEEP inline math like \`$x$\`).
+- Equation excerpts: \`content\` is KaTeX-renderable LaTeX, mathematically equivalent to the source.
+- NEVER attribute a quote to the wrong source. \`sourceId\` must match where \`latexSource\` actually lives.
+- Do NOT invent claims, equations, or cross-source comparisons not supported by the sources.
+
+## Pipeline
+
+Execute these stages in order, writing checkpoint files after each.
+
+### Stage 1: Source Exploration
+- Explore EACH source in turn (read its .tex / page.md / PDF). Keep findings grouped per source id.
+- For EACH source extract: a concise title, authors (as written), publication month+year, and
+  institutions/affiliations if listed.
+- Note the throughline: what connects these sources? Where do they agree, differ, or build on each other?
+- Write findings to ${generationDir}/exploration.md, organized per source plus a "Connections" section.
+- End the file with the line: EXPLORATION_COMPLETE
+
+### Stage 2: Chapter Outline
+Design chapters per the Collection structure above. For each planned chapter, note which source(s) it
+will draw excerpts from. First chapter = Overview (no excerpts, introduces all sources). Last chapter =
+Summary (no excerpts). One clear teaching point per chapter. Chapter labels: 2-4 words.
+Write to ${generationDir}/outline.md and end with: OUTLINE_COMPLETE
+
+### Stage 3: Excerpt Collection
+For each chapter, collect 1-3 excerpts. Each excerpt is one of: \`text\`, \`equation\`, or \`figure\`.
+For EACH excerpt:
+1. Read the specific source file containing it.
+2. Copy the EXACT raw source into \`latexSource\` — character for character.
+3. Set \`sourceId\` to that source's id, and \`sourceFile\` to the relative path within that source.
+4. Write a KaTeX-renderable \`content\` (clean text for text/figure caption; pure KaTeX LaTeX for equation).
+5. **PDF region mapping**: if the source has a regions index, find the matching block and set
+   \`pdfRegion\` to \`{ "page": <0-indexed page in THAT source's PDF>, "bbox": [x0,y0,x1,y1] }\`. The page
+   number is relative to the excerpt's own source PDF. Omit \`pdfRegion\` if no match (it is optional).
+   For figure excerpts, match against \`type: "image"\` blocks near the caption.
+- text vs equation: if prose and math are mixed, use \`text\` (it renders \`$...$\` and \`$$...$$\`).
+- For webpage figure excerpts, set \`visualUrl\` to a real image URL from that source's page-metadata.json.
+Write to ${generationDir}/excerpts.md and end with: EXCERPTS_COMPLETE
+
+### Stage 4: Verification
+For EVERY excerpt: confirm \`latexSource\` exists verbatim in the source named by its \`sourceId\` (Grep the
+.tex files / page.md / re-read the PDF page). Confirm the \`sourceId\` is correct — a quote attributed to
+the wrong source is a hallucination and must be fixed or removed. For equations, confirm \`content\` is
+mathematically equivalent to \`latexSource\`. Remove or replace any excerpt that cannot be verified.
+Write to ${generationDir}/verification.md and end with: VERIFICATION_COMPLETE
+
+### Stage 5: Explanation Writing
+Write each chapter's explanation markdown. Make explanations self-contained (inline the key idea; do not
+write "as shown in the excerpt above"). Ground formalism in intuition. Use KaTeX ($...$ inline, $$...$$
+display). Cross-reference chapters AND sources by name ("Whereas Source A frames this as..., Source B...").
+When a chapter draws on multiple sources, make the comparison explicit. Interpret, don't just describe.
+Write to ${generationDir}/explanations.md and end with: EXPLANATIONS_COMPLETE
+
+### Stage 6: Final Assembly
+Assemble everything into ${generationDir}/story.json with this schema:
+\`\`\`json
+{
+  "id": "<generated-uuid>",
+  "title": "<Concise title for the combined story>",
+  "arxivId": null,
+  "arxivUrl": null,
+  "sourceType": "collection",
+  "sources": [
+    {
+      "id": "<one of ${idList}>",
+      "type": "<arxiv|local|webpage>",
+      "title": "<source title>",
+      "authors": ["<Author One>"],
+      "url": "<arXiv/webpage URL or null>",
+      "arxivId": "<arXiv id or null>",
+      "publishedYear": <int or null>,
+      "publishedMonth": <int 1-12 or null>,
+      "institutions": ["<Institution>"]
+    }
+  ],
+  "query": ${JSON.stringify(query || null)},
+  "createdAt": "<ISO-8601 timestamp>",
+  "chapters": [
+    {
+      "id": "chapter-0",
+      "label": "<2-4 word label>",
+      "excerpts": [
+        {
+          "content": "<display text / KaTeX equation>",
+          "latexSource": "<verbatim raw source>",
+          "type": "<text|equation|figure>",
+          "sourceId": "<which source — REQUIRED>",
+          "sourceFile": "<relative path within that source>",
+          "label": "<e.g. 'Section 3.2' or 'Equation 5'>",
+          "visualUrl": "<optional image URL for webpage figures>",
+          "pdfRegion": { "page": 0, "bbox": [0.1, 0.2, 0.9, 0.35] }
+        }
+      ],
+      "explanation": "<Markdown + KaTeX>"
+    }
+  ]
+}
+\`\`\`
+
+**Validation before writing:**
+1. \`sources\` includes EVERY id in ${idList}, each with a title (authors/year/institutions where known).
+2. Every non-Overview/Summary excerpt has a \`sourceId\` that appears in \`sources\`.
+3. Every excerpt's \`latexSource\` is non-empty and verified against the source named by its \`sourceId\`.
+4. First (Overview) and last (Summary) chapters have \`excerpts: []\`; all others have 1-3 excerpts.
+5. Chapter ids are sequential (chapter-0, chapter-1, ...); labels are 2-4 words.
+6. All KaTeX is valid; no hallucinated claims; no \`pdfRegion\` unless it came from a regions index.
+7. Do NOT set \`pdfFile\` on sources — the CLI fills that in after assembly.
+
+Write ${generationDir}/story.json, then create ${generationDir}/DONE containing exactly "DONE".
+
+## Important Notes
+- Take your time; read each source thoroughly before writing.
+- When in doubt, include MORE context in \`latexSource\`, not less.
+- Never mix up which source a quote came from — \`sourceId\` accuracy is as important as verbatim quoting.
+`;
+}
+
 export function buildPrompt({
   arxivId,
   arxivUrl,

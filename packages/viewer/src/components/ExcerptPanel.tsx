@@ -2,14 +2,24 @@ import { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
-import { Excerpt, StandardExcerpt } from '../types';
+import { Excerpt, Source, StandardExcerpt } from '../types';
 import MathRenderer from './MathRenderer';
 import PdfRegionViewer from './PdfRegionViewer';
 import ProofExcerptDisplay from './ProofExcerptDisplay';
 
+// Stable palette for distinguishing sources in a collection story. Sources are
+// colored by their order in `story.sources`.
+const SOURCE_COLORS = ['#4f9dde', '#e0833b', '#5cb87a', '#b87ad6', '#d65c7a', '#c9a93b'];
+
+function sourceColor(index: number): string {
+  return SOURCE_COLORS[index % SOURCE_COLORS.length];
+}
+
 interface ExcerptPanelProps {
   excerpts: Excerpt[];
   pdfUrl?: string;
+  sourcePdfUrls?: Record<string, string>;
+  sources?: Source[] | null;
   storyMeta?: {
     title: string;
     arxivId: string | null;
@@ -26,12 +36,18 @@ interface ExcerptPanelProps {
   onSelectProofStep?: (info: { excerptIndex: number; stepIndex: number } | null) => void;
 }
 
-export default function ExcerptPanel({ excerpts, pdfUrl, storyMeta, selectedProofStep = null, onSelectProofStep = () => {} }: ExcerptPanelProps) {
+export default function ExcerptPanel({ excerpts, pdfUrl, sourcePdfUrls, sources, storyMeta, selectedProofStep = null, onSelectProofStep = () => {} }: ExcerptPanelProps) {
+  const isCollection = !!sources && sources.length > 1;
+  // sourceId -> { source, index } for badges and colors.
+  const sourceInfo = new Map<string, { source: Source; index: number }>();
+  (sources ?? []).forEach((source, index) => sourceInfo.set(source.id, { source, index }));
+
   if (excerpts.length === 0) {
-    // Overview/summary chapter — show metadata
+    // Overview/summary chapter — show metadata (and, for collections, the source list)
     return (
       <div className="excerpt-panel excerpt-panel-empty">
-        {storyMeta && (
+        {isCollection && <SourcesSummary sources={sources!} />}
+        {!isCollection && storyMeta && (
           <div className="story-meta">
             <div className="meta-icon">📄</div>
             <h2>{storyMeta.title}</h2>
@@ -97,23 +113,74 @@ export default function ExcerptPanel({ excerpts, pdfUrl, storyMeta, selectedProo
             />
           );
         }
-        return <ExcerptCard key={i} excerpt={excerpt} pdfUrl={pdfUrl} />;
+        const info = excerpt.sourceId ? sourceInfo.get(excerpt.sourceId) : undefined;
+        const effectivePdfUrl =
+          (excerpt.sourceId && sourcePdfUrls?.[excerpt.sourceId]) || pdfUrl;
+        return (
+          <ExcerptCard
+            key={i}
+            excerpt={excerpt}
+            pdfUrl={effectivePdfUrl}
+            source={isCollection ? info?.source : undefined}
+            sourceColor={info ? sourceColor(info.index) : undefined}
+          />
+        );
       })}
+    </div>
+  );
+}
+
+/** Front-of-story summary of every source in a collection story. */
+function SourcesSummary({ sources }: { sources: Source[] }) {
+  return (
+    <div className="sources-summary">
+      <h2 className="sources-summary-title">Sources</h2>
+      <p className="sources-summary-sub">This story draws on {sources.length} sources:</p>
+      <ol className="sources-summary-list">
+        {sources.map((source, index) => {
+          const date = source.publishedYear
+            ? source.publishedMonth
+              ? `${new Date(source.publishedYear, source.publishedMonth - 1).toLocaleString('en-US', { month: 'short' })} ${source.publishedYear}`
+              : `${source.publishedYear}`
+            : null;
+          return (
+            <li key={source.id} className="sources-summary-item">
+              <span className="source-dot" style={{ background: sourceColor(index) }} />
+              <div className="sources-summary-body">
+                <div className="sources-summary-name">{source.title}</div>
+                {source.authors && source.authors.length > 0 && (
+                  <div className="sources-summary-authors">{source.authors.join(', ')}{date ? ` · ${date}` : ''}</div>
+                )}
+                {source.url && (
+                  <a href={source.url} target="_blank" rel="noopener noreferrer" className="sources-summary-link">
+                    {source.arxivId ? `arXiv: ${source.arxivId}` : source.type === 'webpage' ? 'Open webpage' : 'Open source'}
+                  </a>
+                )}
+              </div>
+            </li>
+          );
+        })}
+      </ol>
     </div>
   );
 }
 
 const excerptAllowedElements = ['p', 'span', 'div', 'em', 'strong', 'sub', 'sup', 'br'];
 
-function ExcerptCard({ excerpt, pdfUrl }: { excerpt: StandardExcerpt; pdfUrl?: string }) {
+function ExcerptCard({ excerpt, pdfUrl, source, sourceColor }: { excerpt: StandardExcerpt; pdfUrl?: string; source?: Source; sourceColor?: string }) {
   const [showSource, setShowSource] = useState(false);
 
   return (
-    <div className={`excerpt-card excerpt-type-${excerpt.type}`}>
+    <div className={`excerpt-card excerpt-type-${excerpt.type}`} style={sourceColor ? { borderLeft: `3px solid ${sourceColor}` } : undefined}>
       <div className="excerpt-header">
         <span className="excerpt-type-badge">
           {excerpt.type === 'equation' ? '∑ Equation' : excerpt.type === 'figure' ? '▭ Figure' : '¶ Text'}
         </span>
+        {source && (
+          <span className="excerpt-source-badge" style={{ background: sourceColor }} title={source.title}>
+            {source.title}
+          </span>
+        )}
         {excerpt.label && <span className="excerpt-label">{excerpt.label}</span>}
         {excerpt.sourceFile && (
           <span className="excerpt-source-file">{excerpt.sourceFile}</span>

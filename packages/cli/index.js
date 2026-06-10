@@ -24,7 +24,7 @@ import { parseArxivId, downloadLatexSource, downloadPdf } from './arxiv.js';
 import { prepareLocalPdf } from './local.js';
 import { prepareWebpage } from './webpage.js';
 import { emptySourceResult } from './source-utils.js';
-import { buildPrompt } from './prompt.js';
+import { buildPrompt, buildCollectionPrompt } from './prompt.js';
 import { validateStory } from './validate.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -47,10 +47,16 @@ program
   .option('-s, --slug <slug>', 'Story slug for the output filename')
   .addOption(
     new Option('--mode <mode>', 'Story generation mode (required)')
-      .choices(['paper', 'textbook', 'webpage'])
+      .choices(['paper', 'textbook', 'webpage', 'collection'])
       .makeOptionMandatory(),
   )
   .option('--pdf <path>', 'Path to local PDF file (for paper or textbook mode)')
+  .option(
+    '--source <spec>',
+    'A source for --mode collection, as <type>:<value> where type is arxiv|pdf|url. Repeatable.',
+    (value, previous) => (previous || []).concat([value]),
+    [],
+  )
   .option('--models <overrides>', 'Override stage models, e.g. exploration=gpt-5.4,explanations=claude-sonnet-4-6')
   .action(async (source, options) => {
     try {
@@ -59,7 +65,21 @@ program
         parseModelOverrides(options.models),
       );
 
-      if (options.mode === 'webpage') {
+      if (options.mode === 'collection') {
+        if (source) {
+          console.error('✗ Error: --mode collection takes sources via repeated --source flags, not a positional argument.');
+          process.exit(1);
+        }
+        if (options.pdf) {
+          console.error('✗ Error: --pdf cannot be used with --mode collection (use --source pdf:<path>).');
+          process.exit(1);
+        }
+        if (!options.source || options.source.length < 2) {
+          console.error('✗ Error: --mode collection requires at least two --source flags, e.g. --source arxiv:1706.03762 --source pdf:./ch3.pdf');
+          process.exit(1);
+        }
+        await generateCollectionStory(options);
+      } else if (options.mode === 'webpage') {
         if (!source) {
           console.error('✗ Error: --mode webpage requires a URL as the positional argument.');
           process.exit(1);
@@ -158,16 +178,7 @@ async function generateLocalStory(options) {
   if (pdfPath) {
     console.log('📐 Extracting PDF text regions...');
     regionsPath = join(workDir, 'regions.json');
-    const extractScript = join(__dirname, 'extract_regions.py');
-    try {
-      execFileSync('uv', ['run', extractScript, pdfPath, '-o', regionsPath], {
-        stdio: ['pipe', 'pipe', 'pipe'],
-      });
-      const regions = JSON.parse(readFileSync(regionsPath, 'utf8'));
-      const blockCount = regions.pages.reduce((sum, p) => sum + p.blocks.length, 0);
-      console.log(`   ✓ Extracted ${blockCount} text blocks from ${regions.totalPages} pages`);
-    } catch (err) {
-      console.warn(`   ⚠ Region extraction failed (story will proceed without bboxes): ${err.message}`);
+    if (!extractPdfRegions(pdfPath, regionsPath)) {
       regionsPath = null;
     }
   }
@@ -233,16 +244,7 @@ async function generateStory(arxivInput, options) {
   if (pdfPath) {
     console.log('📐 Extracting PDF text regions...');
     regionsPath = join(workDir, 'regions.json');
-    const extractScript = join(__dirname, 'extract_regions.py');
-    try {
-      execFileSync('uv', ['run', extractScript, pdfPath, '-o', regionsPath], {
-        stdio: ['pipe', 'pipe', 'pipe'],
-      });
-      const regions = JSON.parse(readFileSync(regionsPath, 'utf8'));
-      const blockCount = regions.pages.reduce((sum, p) => sum + p.blocks.length, 0);
-      console.log(`   ✓ Extracted ${blockCount} text blocks from ${regions.totalPages} pages`);
-    } catch (err) {
-      console.warn(`   ⚠ Region extraction failed (story will proceed without bboxes): ${err.message}`);
+    if (!extractPdfRegions(pdfPath, regionsPath)) {
       regionsPath = null;
     }
   }
@@ -275,9 +277,140 @@ async function generateStory(arxivInput, options) {
 }
 
 /**
- * Shared generation pipeline: prompt stages → configured agents → validate → save.
+ * Extract PDF text/image regions with PyMuPDF into regionsPath.
+ * Returns true on success; logs a warning and returns false on failure so the
+ * caller can proceed without bounding boxes.
  */
-async function runGenerationPipeline({ prompt, generationDir, workDir, sourceResult, pdfPath, options, sourceType, sourceUrl }) {
+function extractPdfRegions(pdfPath, regionsPath) {
+  const extractScript = join(__dirname, 'extract_regions.py');
+  try {
+    execFileSync('uv', ['run', extractScript, pdfPath, '-o', regionsPath], {
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+    const regions = JSON.parse(readFileSync(regionsPath, 'utf8'));
+    const blockCount = regions.pages.reduce((sum, p) => sum + p.blocks.length, 0);
+    console.log(`   ✓ Extracted ${blockCount} text blocks from ${regions.totalPages} pages`);
+    return true;
+  } catch (err) {
+    console.warn(`   ⚠ Region extraction failed (story will proceed without bboxes): ${err.message}`);
+    return false;
+  }
+}
+
+/**
+ * Prepare a single source for a collection story from a `<type>:<value>` spec.
+ * Each source gets its own working directory so files/PDFs never collide.
+ */
+async function prepareCollectionSource(spec, id, sourceWorkDir) {
+  const idx = spec.indexOf(':');
+  if (idx < 0) {
+    throw new Error(`Invalid --source "${spec}". Use <type>:<value>, e.g. arxiv:1706.03762, pdf:./ch3.pdf, url:https://...`);
+  }
+  const type = spec.slice(0, idx).trim().toLowerCase();
+  const value = spec.slice(idx + 1).trim();
+  mkdirSync(sourceWorkDir, { recursive: true });
+
+  if (type === 'arxiv') {
+    const arxivId = parseArxivId(value);
+    const arxivUrl = `https://arxiv.org/abs/${arxivId}`;
+    const [sourceResult, pdfPath] = await Promise.all([
+      downloadLatexSource(arxivId, sourceWorkDir),
+      downloadPdf(arxivId, sourceWorkDir),
+    ]);
+    return {
+      id, type: 'arxiv', arxivId, arxivUrl, sourceUrl: arxivUrl,
+      sourceResult, hasSource: sourceResult.hasSource,
+      sourceDir: sourceResult.hasSource ? sourceResult.sourceDir : null, pdfPath,
+    };
+  }
+  if (type === 'pdf') {
+    const pdfPath = prepareLocalPdf(value, sourceWorkDir);
+    return { id, type: 'local', sourceResult: emptySourceResult(), hasSource: false, sourceDir: null, pdfPath };
+  }
+  if (type === 'url') {
+    const { sourceResult, metadata } = await prepareWebpage(value, sourceWorkDir);
+    return {
+      id, type: 'webpage', sourceUrl: metadata.url, title: metadata.title,
+      sourceResult, hasSource: true, sourceDir: sourceResult.sourceDir, pdfPath: null,
+    };
+  }
+  throw new Error(`Unknown source type "${type}" in --source "${spec}". Use arxiv, pdf, or url.`);
+}
+
+/**
+ * Generate a story that synthesizes multiple mixed sources (arXiv + PDF + webpage).
+ */
+async function generateCollectionStory(options) {
+  const generationId = uuidv4();
+
+  console.log(`\n📚 Paper Stories Generator (collection — ${options.source.length} sources)`);
+  for (const spec of options.source) console.log(`   • ${spec}`);
+  console.log(`   Query: ${options.query || '(comprehensive cross-source deep-dive)'}`);
+  console.log(`   Generation ID: ${generationId}\n`);
+
+  const workDir = join(resolve(options.outputDir), '.paper-stories-tmp', generationId);
+  const generationDir = join(workDir, 'generation');
+  mkdirSync(generationDir, { recursive: true });
+
+  // Prepare each source into its own subdirectory and extract per-PDF regions.
+  const sources = [];
+  for (let i = 0; i < options.source.length; i++) {
+    const id = `s${i + 1}`;
+    const spec = options.source[i];
+    console.log(`📥 Preparing source ${id}: ${spec}`);
+    const sourceWorkDir = join(workDir, 'sources', id);
+    const prepared = await prepareCollectionSource(spec, id, sourceWorkDir);
+    if (prepared.pdfPath) {
+      console.log(`📐 Extracting PDF text regions for ${id}...`);
+      const regionsPath = join(sourceWorkDir, 'regions.json');
+      if (extractPdfRegions(prepared.pdfPath, regionsPath)) prepared.regionsPath = regionsPath;
+    }
+    sources.push(prepared);
+  }
+
+  if (!sources.some(s => s.hasSource || s.pdfPath)) {
+    throw new Error('None of the provided sources yielded readable content.');
+  }
+
+  const prompt = buildCollectionPrompt({ sources, query: options.query, generationDir });
+
+  const pdfArtifacts = sources
+    .filter(s => s.pdfPath)
+    .map(s => ({ sourceId: s.id, path: s.pdfPath }));
+
+  await runGenerationPipeline({
+    prompt,
+    generationDir,
+    workDir,
+    options,
+    sourceType: 'collection',
+    sourceUrl: null,
+    addDirs: [generationDir, workDir],
+    pdfArtifacts,
+  });
+}
+
+/**
+ * Shared generation pipeline: prompt stages → configured agents → validate → save.
+ *
+ * @param {Object}   args
+ * @param {string[]} [args.addDirs]      - Directories to grant the agents. Defaults to those
+ *                                         derived from sourceResult/pdfPath (single-source flows).
+ * @param {Array<{sourceId: string|null, path: string}>} [args.pdfArtifacts]
+ *                                         - PDFs to publish alongside the story. For collection
+ *                                           stories there is one per source; for single-source
+ *                                           flows it defaults to the single pdfPath (sourceId null).
+ */
+async function runGenerationPipeline({ prompt, generationDir, workDir, sourceResult, pdfPath, options, sourceType, sourceUrl, addDirs, pdfArtifacts }) {
+  // Directories the per-stage agents are allowed to read.
+  const dirs = addDirs || [
+    generationDir,
+    ...(sourceResult?.hasSource ? [sourceResult.sourceDir] : []),
+    ...(pdfPath ? [workDir] : []),
+  ];
+  // PDFs to copy out at publish/save time.
+  const artifacts = pdfArtifacts || (pdfPath ? [{ sourceId: null, path: pdfPath }] : []);
+
   // Write prompt for debugging
   writeFileSync(join(generationDir, '_prompt.md'), prompt);
 
@@ -339,10 +472,8 @@ async function runGenerationPipeline({ prompt, generationDir, workDir, sourceRes
       await runConfiguredStage({
         prompt: buildStagePrompt(prompt, stage.task),
         model: options.config.models[stage.key],
-        generationDir,
+        dirs,
         workDir,
-        sourceResult,
-        pdfPath,
         expectedPath: join(generationDir, stage.output),
         marker: stage.marker,
         stageLabel: stage.label,
@@ -379,24 +510,48 @@ async function runGenerationPipeline({ prompt, generationDir, workDir, sourceRes
 
   spinner.succeed(`Story generated: "${story.title}" (${story.chapters.length} chapters)`);
 
+  const slug = options.slug || slugify(story.title);
+  // Resolve final PDF filenames (and wire them into story.sources[].pdfFile for
+  // multi-source stories) before writing the story JSON anywhere.
+  const pdfOutputs = assignPdfFilenames(story, slug, artifacts);
+
   // Publish to cache repo if specified
   if (options.cacheRepo) {
-    const slug = options.slug || slugify(story.title);
-    await publishToCache(story, slug, options.cacheRepo, pdfPath);
+    await publishToCache(story, slug, options.cacheRepo, pdfOutputs);
   } else {
-    const slug = options.slug || slugify(story.title);
     const outputPath = join(resolve(options.outputDir), `${slug}.json`);
     story.id = slug;
     writeFileSync(outputPath, JSON.stringify(story, null, 2));
-    if (pdfPath && existsSync(pdfPath)) {
-      const pdfOutputPath = join(resolve(options.outputDir), `${slug}.pdf`);
-      copyFileSync(pdfPath, pdfOutputPath);
+    for (const { path: srcPath, filename } of pdfOutputs) {
+      const pdfOutputPath = join(resolve(options.outputDir), filename);
+      copyFileSync(srcPath, pdfOutputPath);
       console.log(`✓ PDF saved to: ${pdfOutputPath}`);
     }
     console.log(`\n✓ Story saved to: ${outputPath}`);
   }
 
   console.log(`\n📁 Generation files kept at: ${generationDir}`);
+}
+
+/**
+ * Decide the published filename for each PDF artifact and, for multi-source
+ * stories, record it on the matching `story.sources[].pdfFile` so the viewer
+ * can load the right PDF per excerpt. Returns [{ path, filename }] for copying.
+ *
+ * Single-source artifacts (sourceId null) keep the legacy `<slug>.pdf` name.
+ */
+function assignPdfFilenames(story, slug, artifacts) {
+  const outputs = [];
+  for (const { sourceId, path: srcPath } of artifacts) {
+    if (!srcPath || !existsSync(srcPath)) continue;
+    const filename = sourceId ? `${slug}-${sourceId}.pdf` : `${slug}.pdf`;
+    outputs.push({ path: srcPath, filename });
+    if (sourceId && Array.isArray(story.sources)) {
+      const src = story.sources.find(s => s.id === sourceId);
+      if (src) src.pdfFile = filename;
+    }
+  }
+  return outputs;
 }
 
 function buildStagePrompt(fullPrompt, task) {
@@ -409,11 +564,7 @@ ${task}
 Important: this invocation is one stage in a multi-agent pipeline. Preserve the schema and constraints from the full Paper Stories instructions above, but do not perform future stages.`;
 }
 
-function runConfiguredStage({ prompt, model, generationDir, workDir, sourceResult, pdfPath, expectedPath, marker, stageLabel }) {
-  const dirs = [generationDir];
-  if (sourceResult.hasSource) dirs.push(sourceResult.sourceDir);
-  if (pdfPath) dirs.push(workDir);
-
+function runConfiguredStage({ prompt, model, dirs, workDir, expectedPath, marker, stageLabel }) {
   if (model?.startsWith('claude-')) {
     return runClaudeStage({ prompt, model, dirs, expectedPath, marker, stageLabel });
   }
@@ -532,7 +683,7 @@ function hasMarker(filePath, marker) {
   }
 }
 
-async function publishToCache(story, slug, cacheRepoPath, pdfPath) {
+async function publishToCache(story, slug, cacheRepoPath, pdfOutputs) {
   const storiesDir = join(cacheRepoPath, 'stories');
   if (!existsSync(storiesDir)) {
     throw new Error(`Cache repo stories directory not found: ${storiesDir}`);
@@ -543,9 +694,10 @@ async function publishToCache(story, slug, cacheRepoPath, pdfPath) {
   const storyPath = join(storiesDir, `${slug}.json`);
   writeFileSync(storyPath, JSON.stringify(story, null, 2));
 
-  if (pdfPath && existsSync(pdfPath)) {
-    const pdfOutputPath = join(storiesDir, `${slug}.pdf`);
-    copyFileSync(pdfPath, pdfOutputPath);
+  for (const { path: srcPath, filename } of pdfOutputs || []) {
+    if (!existsSync(srcPath)) continue;
+    const pdfOutputPath = join(storiesDir, filename);
+    copyFileSync(srcPath, pdfOutputPath);
     console.log(`✓ PDF published to: ${pdfOutputPath}`);
   }
 

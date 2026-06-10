@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Story, Theme } from './types';
-import { parseStoryUrl, fetchStory, resolvePdfUrl, checkChatAvailable, providerFromModel } from './api';
+import { parseStoryUrl, fetchStory, resolvePdfUrl, resolveSourcePdfUrls, checkChatAvailable, providerFromModel } from './api';
 import { recordStoryView } from './storyCache';
 import Sidebar from './components/Sidebar';
 import ChapterDisplay from './components/ChapterDisplay';
@@ -11,7 +11,7 @@ type AppState =
   | { status: 'landing' }
   | { status: 'loading'; url: string }
   | { status: 'error'; message: string }
-  | { status: 'ready'; story: Story; storyUrl: string; currentChapter: number; pdfUrl: string | null; chatAvailable: boolean; chatProvider: string | null };
+  | { status: 'ready'; story: Story; storyUrl: string; currentChapter: number; pdfUrl: string | null; sourcePdfUrls: Record<string, string>; chatAvailable: boolean; chatProvider: string | null };
 
 function useTheme() {
   const [theme, setTheme] = useState<Theme>(() => {
@@ -44,12 +44,17 @@ export default function App() {
     const { storyUrl } = parseStoryUrl();
     if (storyUrl) {
       setState({ status: 'loading', url: storyUrl });
-      Promise.all([fetchStory(storyUrl), resolvePdfUrl(storyUrl), checkChatAvailable()])
-        .then(([story, pdfUrl, chat]) => {
+      fetchStory(storyUrl)
+        .then(async (story) => {
+          const [pdfUrl, sourcePdfUrls, chat] = await Promise.all([
+            resolvePdfUrl(storyUrl),
+            resolveSourcePdfUrls(storyUrl, story),
+            checkChatAvailable(),
+          ]);
           // Per-story chatModel (written at generation time) takes precedence over
           // the server's startup config so the label always matches the backend route.
           const chatProvider = providerFromModel(story.chatModel) ?? chat.provider;
-          setState({ status: 'ready', story, storyUrl, currentChapter: 0, pdfUrl, chatAvailable: chat.available, chatProvider });
+          setState({ status: 'ready', story, storyUrl, currentChapter: 0, pdfUrl, sourcePdfUrls, chatAvailable: chat.available, chatProvider });
           recordStoryView(storyUrl, story);
         })
         .catch(err => {
@@ -142,7 +147,7 @@ export default function App() {
     );
   }
 
-  const { story, currentChapter, pdfUrl, chatAvailable, chatProvider } = state;
+  const { story, currentChapter, pdfUrl, sourcePdfUrls, chatAvailable, chatProvider } = state;
   const chapter = story.chapters[currentChapter];
 
   return (
@@ -165,6 +170,8 @@ export default function App() {
         totalChapters={story.chapters.length}
         onNavigate={navigateChapter}
         pdfUrl={pdfUrl ?? undefined}
+        sourcePdfUrls={sourcePdfUrls}
+        sources={story.sources ?? null}
         chatAvailable={chatAvailable}
         chatProvider={chatProvider}
         storyId={story.id}

@@ -13,6 +13,12 @@ export interface StandardExcerpt {
   visualUrl?: string;
   visualAlt?: string;
   sourceUrl?: string;
+  /**
+   * For multi-source ("collection") stories: which entry in `Story.sources`
+   * this excerpt was drawn from. `pdfRegion.page` is relative to that source's
+   * PDF (`Source.pdfFile`). Absent for single-source stories.
+   */
+  sourceId?: string;
 }
 
 export interface ProofStep {
@@ -29,6 +35,24 @@ export interface ProofExcerpt {
 
 export type Excerpt = StandardExcerpt | ProofExcerpt;
 
+/**
+ * A single source in a multi-source ("collection") story. The `sources` array
+ * is summarized at the front of the story and each excerpt references one of
+ * these by `id`.
+ */
+export interface Source {
+  id: string;                       // stable within the story, e.g. "s1"
+  type: 'arxiv' | 'local' | 'webpage' | string;
+  title: string;
+  authors?: string[] | null;
+  url?: string | null;              // arXiv abstract URL or webpage URL
+  arxivId?: string | null;
+  pdfFile?: string | null;          // filename of the stored PDF, relative to the story JSON
+  publishedYear?: number | null;
+  publishedMonth?: number | null;
+  institutions?: string[] | null;
+}
+
 export interface Chapter {
   id: string;
   label: string;
@@ -41,8 +65,10 @@ export interface Story {
   title: string;
   arxivId: string | null;
   arxivUrl: string | null;
-  sourceType?: 'arxiv' | 'local' | 'webpage' | string | null;
+  sourceType?: 'arxiv' | 'local' | 'webpage' | 'collection' | string | null;
   sourceUrl?: string | null;
+  /** Present for multi-source stories; absent (or length 1) for single-source. */
+  sources?: Source[] | null;
   authors: string[] | null;
   publishedYear: number | null;
   publishedMonth: number | null;

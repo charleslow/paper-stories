@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { Chapter, ProofExcerpt, Theme } from '../types';
+import { Chapter, ProofExcerpt, Source, Theme } from '../types';
 import ExcerptPanel from './ExcerptPanel';
 import ExplanationPanel from './ExplanationPanel';
 import ChatPanel from './ChatPanel';
@@ -12,6 +12,8 @@ interface ChapterDisplayProps {
   totalChapters: number;
   onNavigate: (index: number) => void;
   pdfUrl?: string;
+  sourcePdfUrls?: Record<string, string>;
+  sources?: Source[] | null;
   chatAvailable: boolean;
   chatProvider: string | null;
   storyId: string;
@@ -39,6 +41,8 @@ export default function ChapterDisplay({
   totalChapters,
   onNavigate,
   pdfUrl,
+  sourcePdfUrls,
+  sources,
   chatAvailable,
   chatProvider,
   storyId,
@@ -174,6 +178,8 @@ export default function ChapterDisplay({
             <ExcerptPanel
               excerpts={chapter.excerpts}
               pdfUrl={pdfUrl}
+              sourcePdfUrls={sourcePdfUrls}
+              sources={sources}
               storyMeta={storyMeta}
               selectedProofStep={selectedProofStep}
               onSelectProofStep={setSelectedProofStep}
@@ -202,6 +208,8 @@ export default function ChapterDisplay({
             <ExcerptPanel
               excerpts={chapter.excerpts}
               pdfUrl={pdfUrl}
+              sourcePdfUrls={sourcePdfUrls}
+              sources={sources}
               storyMeta={storyMeta}
               selectedProofStep={selectedProofStep}
               onSelectProofStep={setSelectedProofStep}

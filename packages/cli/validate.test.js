@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { validateStory } from './validate.js';
+import { validateStory, validateSources } from './validate.js';
 
 function makeStory(overrides = {}, chapterOverrides = {}, excerptOverrides = {}) {
   const excerpt = {
@@ -70,6 +70,68 @@ describe('validateStory', () => {
     assert.throws(() => validateStory(makeStory({ sourceUrl: 42 })), /sourceUrl/);
     assert.throws(() => validateStory(makeStory({}, {}, { visualUrl: 42 })), /visualUrl/);
     assert.throws(() => validateStory(makeStory({}, {}, { sourceUrl: 42 })), /sourceUrl/);
+  });
+});
+
+describe('validateSources', () => {
+  it('returns an empty set when sources is absent or null', () => {
+    assert.equal(validateSources(undefined).size, 0);
+    assert.equal(validateSources(null).size, 0);
+  });
+
+  it('returns the set of declared ids for a valid array', () => {
+    const ids = validateSources([
+      { id: 's1', type: 'arxiv', title: 'A' },
+      { id: 's2', type: 'webpage', title: 'B' },
+    ]);
+    assert.deepEqual([...ids].sort(), ['s1', 's2']);
+  });
+
+  it('rejects bad shapes', () => {
+    assert.throws(() => validateSources('nope'), /must be an array/);
+    assert.throws(() => validateSources([{ type: 'arxiv', title: 'A' }]), /non-empty string id/);
+    assert.throws(() => validateSources([{ id: 's1', type: 'arxiv' }]), /title/);
+    assert.throws(() => validateSources([{ id: 's1', title: 'A' }]), /type/);
+    assert.throws(() => validateSources([
+      { id: 's1', type: 'arxiv', title: 'A' },
+      { id: 's1', type: 'arxiv', title: 'B' },
+    ]), /Duplicate source id/);
+    assert.throws(() => validateSources([{ id: 's1', type: 'arxiv', title: 'A', pdfFile: 7 }]), /pdfFile/);
+  });
+});
+
+describe('validateStory — multi-source', () => {
+  const twoSources = [
+    { id: 's1', type: 'arxiv', title: 'Source One' },
+    { id: 's2', type: 'webpage', title: 'Source Two' },
+  ];
+
+  it('accepts a collection story whose excerpts reference known sources', () => {
+    assert.doesNotThrow(() => validateStory(makeStory(
+      { sourceType: 'collection', sources: twoSources, arxivId: null, arxivUrl: null },
+      {},
+      { sourceId: 's1' },
+    )));
+  });
+
+  it('rejects an excerpt referencing an unknown sourceId', () => {
+    assert.throws(() => validateStory(makeStory(
+      { sourceType: 'collection', sources: twoSources },
+      {},
+      { sourceId: 's9' },
+    )), /unknown sourceId/);
+  });
+
+  it('requires every excerpt to carry a sourceId when multi-source', () => {
+    assert.throws(() => validateStory(makeStory(
+      { sourceType: 'collection', sources: twoSources },
+    )), /missing sourceId/);
+  });
+
+  it('does not require sourceId for a single declared source', () => {
+    assert.doesNotThrow(() => validateStory(makeStory(
+      { sources: [{ id: 's1', type: 'arxiv', title: 'Solo' }] },
+    )));
   });
 });
 

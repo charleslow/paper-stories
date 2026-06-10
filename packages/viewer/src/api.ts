@@ -69,6 +69,34 @@ export async function resolvePdfUrl(storyUrl: string): Promise<string | null> {
   return null;
 }
 
+/**
+ * For multi-source ("collection") stories, resolve each source's PDF URL.
+ * Each `source.pdfFile` is a filename sitting next to the story JSON. Returns a
+ * map of sourceId → URL for the PDFs that actually exist.
+ */
+export async function resolveSourcePdfUrls(
+  storyUrl: string,
+  story: Story,
+): Promise<Record<string, string>> {
+  const sources = story.sources;
+  if (!sources || sources.length === 0) return {};
+  const baseDir = storyUrl.replace(/[^/]*$/, ''); // strip filename, keep trailing slash
+  const entries = await Promise.all(
+    sources.map(async (s): Promise<[string, string] | null> => {
+      if (!s.pdfFile) return null;
+      const url = baseDir + s.pdfFile;
+      try {
+        const res = await fetch(url, { method: 'HEAD' });
+        if (res.ok) return [s.id, url];
+      } catch {
+        // PDF not available
+      }
+      return null;
+    }),
+  );
+  return Object.fromEntries(entries.filter((e): e is [string, string] => e !== null));
+}
+
 // Local story discovery
 export interface LocalStory {
   id: string;
