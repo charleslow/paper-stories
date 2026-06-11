@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import ExcerptPanel from './ExcerptPanel';
-import { Excerpt } from '../types';
+import { Excerpt, Source } from '../types';
 
 vi.mock('./PdfRegionViewer', () => ({
   default: () => <div data-testid="pdf-region-viewer" />,
@@ -142,6 +142,46 @@ describe('ExcerptPanel', () => {
     const { container } = render(<ExcerptPanel excerpts={[figureExcerpt]} pdfUrl="/test.pdf" />);
     const katexElements = container.querySelectorAll('.katex');
     expect(katexElements.length).toBeGreaterThan(0);
+  });
+
+  describe('collection (multi-source)', () => {
+    const sources: Source[] = [
+      { id: 's1', type: 'arxiv', title: 'Attention Is All You Need', authors: ['Vaswani et al.'], url: 'https://arxiv.org/abs/1706.03762', arxivId: '1706.03762', pdfFile: 'multi-s1.pdf' },
+      { id: 's2', type: 'webpage', title: 'The Illustrated Transformer', url: 'https://jalammar.github.io/illustrated-transformer/' },
+    ];
+
+    it('lists every source on the overview (empty) panel', () => {
+      render(<ExcerptPanel excerpts={[]} sources={sources} />);
+      expect(screen.getByText('Sources')).toBeInTheDocument();
+      expect(screen.getByText('Attention Is All You Need')).toBeInTheDocument();
+      expect(screen.getByText('The Illustrated Transformer')).toBeInTheDocument();
+      expect(screen.getByText('arXiv: 1706.03762')).toHaveAttribute('href', 'https://arxiv.org/abs/1706.03762');
+    });
+
+    it('tags each excerpt with its source title', () => {
+      const excerpt: Excerpt = { ...baseExcerpt, sourceId: 's2' };
+      render(<ExcerptPanel excerpts={[excerpt]} sources={sources} />);
+      expect(screen.getByText('The Illustrated Transformer')).toBeInTheDocument();
+    });
+
+    it('routes pdfRegion to the per-source PDF', () => {
+      const excerpt: Excerpt = { ...baseExcerpt, sourceId: 's1', pdfRegion: { page: 0, bbox: [0.1, 0.1, 0.9, 0.5] } };
+      render(
+        <ExcerptPanel
+          excerpts={[excerpt]}
+          sources={sources}
+          sourcePdfUrls={{ s1: 'https://example.com/multi-s1.pdf' }}
+        />,
+      );
+      // PdfRegionViewer is mocked, but it only renders when an effective pdfUrl resolves.
+      expect(screen.getByTestId('pdf-region-viewer')).toBeInTheDocument();
+    });
+
+    it('does not show source badges for a single-source story', () => {
+      const excerpt: Excerpt = { ...baseExcerpt, sourceId: 's1' };
+      render(<ExcerptPanel excerpts={[excerpt]} sources={[sources[0]]} />);
+      expect(screen.queryByText('Attention Is All You Need')).not.toBeInTheDocument();
+    });
   });
 
   it('does not render disallowed markdown elements in excerpts', () => {

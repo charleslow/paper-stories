@@ -52,21 +52,45 @@ export async function fetchStory(url: string): Promise<Story> {
   }
 }
 
+/** HEAD-probe a URL; true if it resolves to an existing resource. */
+async function pdfExists(url: string): Promise<boolean> {
+  try {
+    const response = await fetch(url, { method: 'HEAD' });
+    return response.ok;
+  } catch {
+    return false; // PDF not available
+  }
+}
+
 /**
  * Check if a PDF exists alongside the story JSON (same path, .pdf extension).
  * Returns the PDF URL if it exists, or null.
  */
 export async function resolvePdfUrl(storyUrl: string): Promise<string | null> {
   const pdfUrl = storyUrl.replace(/\.json$/, '.pdf');
-  try {
-    const response = await fetch(pdfUrl, { method: 'HEAD' });
-    if (response.ok) {
-      return pdfUrl;
-    }
-  } catch {
-    // PDF not available
-  }
-  return null;
+  return (await pdfExists(pdfUrl)) ? pdfUrl : null;
+}
+
+/**
+ * For multi-source ("collection") stories, resolve each source's PDF URL.
+ * Each `source.pdfFile` is a filename sitting next to the story JSON. Returns a
+ * map of sourceId → URL for the PDFs that actually exist.
+ */
+export async function resolveSourcePdfUrls(
+  storyUrl: string,
+  story: Story,
+): Promise<Record<string, string>> {
+  const sources = story.sources;
+  if (!sources || sources.length === 0) return {};
+  const baseDir = storyUrl.replace(/[^/]*$/, ''); // strip filename, keep trailing slash
+  const entries = await Promise.all(
+    sources.map(async (s): Promise<[string, string] | null> => {
+      if (!s.pdfFile) return null;
+      const url = baseDir + s.pdfFile;
+      return (await pdfExists(url)) ? [s.id, url] : null;
+    }),
+  );
+  return Object.fromEntries(entries.filter((e): e is [string, string] => e !== null));
 }
 
 // Local story discovery

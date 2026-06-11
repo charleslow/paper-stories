@@ -20,6 +20,41 @@ export function validateProofExcerpt(ex, chapterId) {
 }
 
 /**
+ * Validates a story's optional `sources` array (multi-source / collection
+ * stories). Returns the set of declared source ids (empty for single-source
+ * stories with no `sources` array). Throws if the shape is invalid.
+ */
+export function validateSources(sources) {
+  const ids = new Set();
+  if (sources === undefined || sources === null) return ids;
+  if (!Array.isArray(sources)) {
+    throw new Error('story.sources must be an array when present');
+  }
+  for (const src of sources) {
+    if (typeof src !== 'object' || src === null) {
+      throw new Error('Each entry in story.sources must be an object');
+    }
+    if (!src.id || typeof src.id !== 'string') {
+      throw new Error('Each source must have a non-empty string id');
+    }
+    if (ids.has(src.id)) {
+      throw new Error(`Duplicate source id in story.sources: "${src.id}"`);
+    }
+    if (!src.title || typeof src.title !== 'string') {
+      throw new Error(`Source "${src.id}" must have a non-empty string title`);
+    }
+    if (!src.type || typeof src.type !== 'string') {
+      throw new Error(`Source "${src.id}" must have a string type`);
+    }
+    if (src.pdfFile !== undefined && src.pdfFile !== null && typeof src.pdfFile !== 'string') {
+      throw new Error(`Source "${src.id}" has invalid pdfFile`);
+    }
+    ids.add(src.id);
+  }
+  return ids;
+}
+
+/**
  * Validates a story JSON object. Throws if invalid.
  *
  * arxivId and arxivUrl are optional (may be null for local sources).
@@ -36,6 +71,21 @@ export function validateStory(story) {
   if (!Array.isArray(story.chapters) || story.chapters.length < 5) {
     throw new Error(`Expected at least 5 chapters, got ${story.chapters?.length || 0}`);
   }
+
+  // Multi-source ("collection") stories carry a top-level `sources` array.
+  // Each excerpt then references one of these via `sourceId`.
+  const sourceIds = validateSources(story.sources);
+  // Derive multi-source mode from the declared sourceType, not just from how
+  // many sources the LLM happened to emit.  A collection story with a missing
+  // or truncated sources array would otherwise slip through with isMultiSource
+  // false, so sourceId validation on excerpts would never fire.
+  const isCollection = story.sourceType === 'collection';
+  if (isCollection && sourceIds.size < 2) {
+    throw new Error(
+      `Collection story must declare at least 2 entries in story.sources, got ${sourceIds.size}`,
+    );
+  }
+  const isMultiSource = sourceIds.size > 1 || isCollection;
 
   const totalChapters = story.chapters.length;
   for (let ci = 0; ci < totalChapters; ci++) {
@@ -73,6 +123,16 @@ export function validateStory(story) {
       }
       if (ex.sourceUrl !== undefined && typeof ex.sourceUrl !== 'string') {
         throw new Error(`Chapter ${ch.id} has excerpt with invalid sourceUrl`);
+      }
+      if (ex.sourceId !== undefined) {
+        if (typeof ex.sourceId !== 'string') {
+          throw new Error(`Chapter ${ch.id} has excerpt with invalid sourceId`);
+        }
+        if (sourceIds.size > 0 && !sourceIds.has(ex.sourceId)) {
+          throw new Error(`Chapter ${ch.id} has excerpt with unknown sourceId "${ex.sourceId}" (not in story.sources)`);
+        }
+      } else if (isMultiSource) {
+        throw new Error(`Chapter ${ch.id} has excerpt missing sourceId (required for multi-source stories)`);
       }
       if (ex.pdfRegion) {
         const { page, bbox } = ex.pdfRegion;

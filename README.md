@@ -35,8 +35,23 @@ node index.js generate --mode paper https://arxiv.org/abs/1706.03762 --query "at
 node index.js generate --mode textbook --pdf ./linear-algebra-ch3.pdf --query "eigenvalues" --slug "eigenvalues"
 ```
 
+### Generate a story from multiple mixed sources (collection)
+
+A single story can synthesize and cite several sources at once — any mix of arXiv papers, local PDFs, and webpages. Pass each one with a repeatable `--source <type>:<value>` flag (`type` is `arxiv`, `pdf`, or `url`):
+
+```bash
+node index.js generate --mode collection \
+  --source arxiv:1706.03762 \
+  --source pdf:./illustrated-transformer-notes.pdf \
+  --source url:https://jalammar.github.io/illustrated-transformer/ \
+  --query "attention" --slug "attention-collection"
+```
+
+The agent greps across all sources, weaves one cross-source narrative, and tags every excerpt with the source it came from. The story's overview lists all sources up front, and each excerpt shows a color-coded source badge. Each source's PDF is stored alongside the story as `<slug>-<sourceId>.pdf` so PDF-region grounding keeps working per source.
+
 Options:
-- `--mode <mode>` — Story generation mode: `paper`, `textbook`, or `webpage` (required)
+- `--mode <mode>` — Story generation mode: `paper`, `textbook`, `webpage`, or `collection` (required)
+- `--source <spec>` — A source for `collection` mode as `<type>:<value>` (`arxiv`/`pdf`/`url`). Repeatable; at least two required.
 - `--pdf <path>` — Use a local PDF instead of an arXiv URL (e.g. a textbook chapter)
 - `-q, --query <query>` — Focus the story on a specific aspect
 - `-c, --cache-repo <path>` — Publish directly to code-stories-cache repo
@@ -117,6 +132,17 @@ packages/
   "arxivUrl": "https://arxiv.org/abs/2401.12345",
   "query": "optional focus query",
   "createdAt": "2026-03-05T00:00:00.000Z",
+  "sources": [                                  // optional; present for multi-source "collection" stories
+    {
+      "id": "s1",
+      "type": "arxiv",
+      "title": "Attention Is All You Need",
+      "authors": ["Vaswani et al."],
+      "url": "https://arxiv.org/abs/1706.03762",
+      "arxivId": "1706.03762",
+      "pdfFile": "attention-collection-s1.pdf"   // CLI-assigned; viewer loads it for this source's excerpts
+    }
+  ],
   "chapters": [
     {
       "id": "chapter-0",
@@ -127,8 +153,9 @@ packages/
           "latexSource": "Raw \\LaTeX{} from source",
           "type": "text|equation",
           "sourceFile": "main.tex",
+          "sourceId": "s1",                       // collection stories only — which entry in `sources`
           "label": "Section 3.2",
-          "pdfRegion": { "page": 0, "bbox": [0.1, 0.2, 0.9, 0.35] }  // optional; bbox values from region extraction
+          "pdfRegion": { "page": 0, "bbox": [0.1, 0.2, 0.9, 0.35] }  // optional; page is within that source's PDF
         }
       ],
       "explanation": "Markdown with $inline$ and $$display$$ math"
@@ -136,6 +163,8 @@ packages/
   ]
 }
 ```
+
+For **collection** stories the top-level `sources` array is summarized at the front of the story, and every excerpt carries a `sourceId` referencing it. `pdfRegion.page` is relative to that source's own PDF (`source.pdfFile`).
 
 ## PDF region grounding
 
