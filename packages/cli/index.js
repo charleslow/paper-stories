@@ -368,8 +368,15 @@ async function generateCollectionStory(options) {
     if (extractPdfRegions(prepared.pdfPath, regionsPath)) prepared.regionsPath = regionsPath;
   }
 
-  if (!sources.some(s => s.hasSource || s.pdfPath)) {
-    throw new Error('None of the provided sources yielded readable content.');
+  const failedSources = sources
+    .map((s, i) => ({ s, spec: options.source[i] }))
+    .filter(({ s }) => !s.hasSource && !s.pdfPath);
+  if (failedSources.length > 0) {
+    const list = failedSources.map(({ s, spec }) => `${s.id} (${spec})`).join(', ');
+    throw new Error(
+      `The following source(s) failed to yield readable content: ${list}. ` +
+      `All sources must be readable before generation can start.`,
+    );
   }
 
   const prompt = buildCollectionPrompt({ sources, query: options.query, generationDir });
