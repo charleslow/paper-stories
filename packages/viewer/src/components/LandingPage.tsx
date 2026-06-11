@@ -7,6 +7,7 @@ import ThemeToggle from './ThemeToggle';
 export default function LandingPage({ theme, onToggleTheme }: { theme: Theme; onToggleTheme: () => void }) {
   const [input, setInput] = useState('');
   const [localStories, setLocalStories] = useState<LocalStory[]>([]);
+  const [search, setSearch] = useState('');
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
   const [recentStories, setRecentStories] = useState<RecentStory[]>(() =>
     !navigator.onLine ? getRecentStories() : [],
@@ -100,20 +101,36 @@ export default function LandingPage({ theme, onToggleTheme }: { theme: Theme; on
         {localStories.length > 0 && (
           <div className="landing-recent">
             <h3>Local Stories</h3>
+            <div className="landing-search">
+              <span className="landing-search-icon">🔍</span>
+              <input
+                type="text"
+                className="landing-search-input"
+                placeholder="Search stories..."
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+              />
+            </div>
             <ul>
-              {localStories.map((story) => (
-                <li key={story.id}>
-                  <a href={`?url=${encodeURIComponent(story.url)}`}>
-                    {story.title}
-                    {story.arxivId && <span className="recent-arxiv"> ({story.arxivId})</span>}
-                  </a>
-                  {(story.modifiedAt || story.createdAt) && (
-                    <span className="recent-date">
-                      {new Date((story.modifiedAt || story.createdAt)!).toLocaleDateString()}
-                    </span>
-                  )}
-                </li>
-              ))}
+              {localStories
+                .filter(s => {
+                  if (!search.trim()) return true;
+                  const q = search.toLowerCase();
+                  return s.title.toLowerCase().includes(q) || s.arxivId?.toLowerCase().includes(q) || s.id.toLowerCase().includes(q);
+                })
+                .map((story) => (
+                  <li key={story.id}>
+                    <a href={`?url=${encodeURIComponent(story.url)}`}>
+                      {story.title}
+                      {story.arxivId && <span className="recent-arxiv"> ({story.arxivId})</span>}
+                    </a>
+                    {(story.modifiedAt || story.createdAt) && (
+                      <span className="recent-date">
+                        {new Date((story.modifiedAt || story.createdAt)!).toLocaleDateString()}
+                      </span>
+                    )}
+                  </li>
+                ))}
             </ul>
           </div>
         )}
