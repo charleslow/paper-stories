@@ -133,6 +133,19 @@ describe('validateStory — multi-source', () => {
       { sources: [{ id: 's1', type: 'arxiv', title: 'Solo' }] },
     )));
   });
+
+  it('rejects a collection story with fewer than 2 sources', () => {
+    assert.throws(() => validateStory(makeStory(
+      { sourceType: 'collection', sources: [] },
+    )), /at least 2 entries/);
+    assert.throws(() => validateStory(makeStory(
+      { sourceType: 'collection', sources: [{ id: 's1', type: 'arxiv', title: 'Solo' }] },
+    )), /at least 2 entries/);
+    assert.throws(() => validateStory(makeStory(
+      { sourceType: 'collection' },
+    )), /at least 2 entries/);
+  });
+
 });
 
 describe('validateStory — pdfRegion', () => {

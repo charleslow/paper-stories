@@ -75,7 +75,17 @@ export function validateStory(story) {
   // Multi-source ("collection") stories carry a top-level `sources` array.
   // Each excerpt then references one of these via `sourceId`.
   const sourceIds = validateSources(story.sources);
-  const isMultiSource = sourceIds.size > 1;
+  // Derive multi-source mode from the declared sourceType, not just from how
+  // many sources the LLM happened to emit.  A collection story with a missing
+  // or truncated sources array would otherwise slip through with isMultiSource
+  // false, so sourceId validation on excerpts would never fire.
+  const isCollection = story.sourceType === 'collection';
+  if (isCollection && sourceIds.size < 2) {
+    throw new Error(
+      `Collection story must declare at least 2 entries in story.sources, got ${sourceIds.size}`,
+    );
+  }
+  const isMultiSource = sourceIds.size > 1 || isCollection;
 
   const totalChapters = story.chapters.length;
   for (let ci = 0; ci < totalChapters; ci++) {
