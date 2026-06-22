@@ -4,6 +4,7 @@ import { fileURLToPath } from 'url';
 import yaml from 'js-yaml';
 
 const VALID_MODEL_KEYS = new Set([
+  'index',
   'exploration',
   'outline',
   'excerpts',

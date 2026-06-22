@@ -188,6 +188,7 @@ export default function App() {
         theme={theme}
         onToggleTheme={toggleTheme}
         onProofAdded={handleProofAdded}
+        generation={story.generation ?? null}
       />
     </div>
   );

@@ -60,6 +60,41 @@ export interface Chapter {
   explanation: string;
 }
 
+/**
+ * Token usage for one generation stage (index, exploration, outline, excerpts,
+ * verification, explanations, assemble). Any field may be null when the stage's
+ * runner did not report it.
+ */
+export interface StageUsage {
+  key: string;
+  model: string | null;
+  inputTokens?: number | null;
+  outputTokens?: number | null;
+  cacheReadInputTokens?: number | null;
+  cacheCreationInputTokens?: number | null;
+  totalTokens?: number | null;
+  costUsd?: number | null;
+}
+
+export interface GenerationTotals {
+  inputTokens?: number | null;
+  outputTokens?: number | null;
+  cacheReadInputTokens?: number | null;
+  cacheCreationInputTokens?: number | null;
+  totalTokens?: number | null;
+  costUsd?: number | null;
+}
+
+/**
+ * How a story was generated — per-stage model + token usage, surfaced on the
+ * overview (first) page of the viewer. Optional: older stories won't have it.
+ */
+export interface GenerationStats {
+  generatedAt?: string;
+  stages: StageUsage[];
+  totals?: GenerationTotals | null;
+}
+
 export interface Story {
   id: string;
   title: string;
@@ -77,6 +112,8 @@ export interface Story {
   createdAt: string;
   chapters: Chapter[];
   chatModel?: string | null;
+  /** Per-stage model + token usage (CLI telemetry); shown on the overview page. */
+  generation?: GenerationStats | null;
 }
 
 export interface ChatMessage {

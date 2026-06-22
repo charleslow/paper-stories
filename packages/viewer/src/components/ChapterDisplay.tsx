@@ -1,8 +1,9 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { Chapter, ProofExcerpt, Source, Theme } from '../types';
+import { Chapter, GenerationStats, ProofExcerpt, Source, Theme } from '../types';
 import ExcerptPanel from './ExcerptPanel';
 import ExplanationPanel from './ExplanationPanel';
 import ChatPanel from './ChatPanel';
+import GenerationStatsPanel from './GenerationStats';
 import ThemeToggle from './ThemeToggle';
 
 interface ChapterDisplayProps {
@@ -32,6 +33,7 @@ interface ChapterDisplayProps {
   theme: Theme;
   onToggleTheme: () => void;
   onProofAdded?: (chapterId: string) => void;
+  generation?: GenerationStats | null;
 }
 
 export default function ChapterDisplay({
@@ -50,6 +52,7 @@ export default function ChapterDisplay({
   theme,
   onToggleTheme,
   onProofAdded,
+  generation,
 }: ChapterDisplayProps) {
   const [splitPercent, setSplitPercent] = useState(67);
   const [isDragging, setIsDragging] = useState(false);
@@ -194,12 +197,15 @@ export default function ChapterDisplay({
               />
             </div>
           ) : (
-            <ExplanationPanel
-              explanation={chapter.explanation}
-              proofStepExplanation={proofStepDetail?.explanation}
-              proofStepLabel={proofStepDetail?.label}
-              onClearProofStep={() => setSelectedProofStep(null)}
-            />
+            <>
+              <ExplanationPanel
+                explanation={chapter.explanation}
+                proofStepExplanation={proofStepDetail?.explanation}
+                proofStepLabel={proofStepDetail?.label}
+                onClearProofStep={() => setSelectedProofStep(null)}
+              />
+              {isFirst && generation && <GenerationStatsPanel generation={generation} />}
+            </>
           )}
         </div>
       ) : (
@@ -227,6 +233,7 @@ export default function ChapterDisplay({
                 proofStepLabel={proofStepDetail?.label}
                 onClearProofStep={() => setSelectedProofStep(null)}
               />
+              {isFirst && generation && <GenerationStatsPanel generation={generation} />}
               {chatAvailable && (
                 <ChatPanel
                   storyId={storyId}

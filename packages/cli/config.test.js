@@ -14,6 +14,10 @@ describe('CLI config', () => {
     assert.equal(config.models.exploration, 'gpt-5.4');
     assert.equal(config.models.explanations, 'claude-opus-4-6');
     assert.equal(config.models.chat, 'gpt-5.4');
+    // Mechanical stages default to the cheaper haiku model.
+    assert.equal(config.models.index, 'claude-haiku-4-5');
+    assert.equal(config.models.verification, 'claude-haiku-4-5');
+    assert.equal(config.models.assemble, 'claude-haiku-4-5');
   });
 
   it('merges configs with later model values taking precedence', () => {
