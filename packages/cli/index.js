@@ -446,7 +446,13 @@ async function runGenerationPipeline({ promptParts, generationDir, workDir, sour
   // displayLabel: short viewer label — keep in sync with STAGE_LABELS in
   // packages/viewer/src/components/GenerationStats.tsx
   const stages = [
-    { key: 'index',        displayLabel: 'Index',        output: 'index.json',        label: 'Stage 0: Indexing source...',                    isComplete: jsonComplete('segments') },
+    {
+      key: 'index', displayLabel: 'Index', output: 'index.json', label: 'Stage 0: Indexing source...',
+      isComplete: jsonComplete('segments'),
+      skip: (ctx) => !ctx.hasTextSource,
+      skipSentinel: { indexSkipped: true, metadata: {}, segments: [] },
+      skipLabel: 'Stage 0: Indexing skipped (no text source)',
+    },
     { key: 'exploration',  displayLabel: 'Exploration',  output: 'exploration.md',    label: 'Stage 1: Exploring sources...',                  isComplete: markerComplete('EXPLORATION_COMPLETE') },
     { key: 'outline',      displayLabel: 'Outline',      output: 'outline.json',      label: 'Stage 2: Planning chapter outline...',           isComplete: jsonComplete('chapters') },
     { key: 'excerpts',     displayLabel: 'Excerpts',     output: 'excerpts.json',     label: 'Stage 3: Collecting excerpts...',                isComplete: jsonComplete('chapters') },
@@ -468,15 +474,11 @@ async function runGenerationPipeline({ promptParts, generationDir, workDir, sour
       const model = options.config.models[stage.key];
       const expectedPath = join(generationDir, stage.output);
 
-      // Stage 0 (index) is only useful when text files (.tex or .md) are
-      // available — the LLM would have to read the whole PDF anyway. Skip the
-      // LLM call entirely and write an empty index so later stages know
-      // indexing was not possible.
-      if (stage.key === 'index' && !hasTextSource) {
-        if (!existsSync(expectedPath)) {
-          writeFileSync(expectedPath, JSON.stringify({ indexSkipped: true, metadata: {}, segments: [] }, null, 2));
+      if (stage.skip?.({ hasTextSource })) {
+        if (stage.skipSentinel != null && !existsSync(expectedPath)) {
+          writeFileSync(expectedPath, JSON.stringify(stage.skipSentinel, null, 2));
         }
-        spinner.text = 'Stage 0: Indexing skipped (no text source)';
+        spinner.text = stage.skipLabel ?? `${stage.label} [skipped]`;
         stageUsages.push({ key: stage.key, displayLabel: stage.displayLabel, model: null, ...normalizeUsage(null) });
         continue;
       }

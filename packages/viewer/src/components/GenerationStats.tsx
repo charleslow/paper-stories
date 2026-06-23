@@ -20,7 +20,7 @@ const fmt = (n: number | null | undefined): string =>
 const fmtCost = (n: number | null | undefined): string =>
   typeof n === 'number' && Number.isFinite(n) ? `$${n.toFixed(n < 1 ? 4 : 2)}` : '—';
 
-function stageLabel(s: StageUsage): string {
+function stageLabel(s: { key: string; displayLabel?: string }): string {
   return s.displayLabel ?? STAGE_LABELS[s.key] ?? s.key;
 }
 
@@ -33,7 +33,7 @@ export default function GenerationStatsPanel({ generation }: { generation: Gener
   if (!generation?.stages?.length) return null;
 
   const totals = generation.totals ?? null;
-  const anyCost = generation.stages.some(s => s.costUsd != null) || totals?.costUsd != null;
+  const anyCost = totals?.costUsd != null || generation.stages.some(s => s.costUsd != null);
   const parseErrors = generation.parseErrors ?? [];
 
   return (
@@ -41,7 +41,7 @@ export default function GenerationStatsPanel({ generation }: { generation: Gener
       <h3 className="gen-stats-title">How this story was generated</h3>
       {parseErrors.length > 0 && (
         <p className="gen-stats-warn">
-          Usage data unavailable for: {parseErrors.map(k => STAGE_LABELS[k] ?? k).join(', ')}
+          Usage data unavailable for: {parseErrors.map(k => stageLabel(generation.stages.find(s => s.key === k) ?? { key: k })).join(', ')}
           {' '}(runner output format may have changed).
         </p>
       )}

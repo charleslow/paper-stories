@@ -129,6 +129,6 @@ export function buildGenerationStats(stageUsages, parseErrors = []) {
     generatedAt: new Date().toISOString(),
     stages: stageUsages,
     totals: any || tokenSeen ? totals : null,
-    ...(parseErrors.length > 0 ? { parseErrors } : {}),
+    ...(parseErrors.length ? { parseErrors } : {}),
   };
 }
