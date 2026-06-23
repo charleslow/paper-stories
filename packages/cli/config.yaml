@@ -3,12 +3,17 @@
 # Users can override these defaults with --models stage=model,stage=model.
 # Models whose names start with "claude-" run through Claude Code; all other
 # model names run through Codex.
+#
+# The mechanical stages (index, verification, assemble) default to the cheaper
+# claude-haiku-4-5 — they catalogue, grep, and stitch rather than reason — and
+# can be overridden per run like any other stage.
 
 models:
+  index: claude-haiku-4-5
   exploration: gpt-5.4
   outline: claude-sonnet-4-6
   excerpts: claude-sonnet-4-6
-  verification: gpt-5.4
+  verification: claude-haiku-4-5
   explanations: claude-opus-4-6
-  assemble: gpt-5.4
+  assemble: claude-haiku-4-5
   chat: gpt-5.4

@@ -15,7 +15,7 @@
 import { Command, Option } from 'commander';
 import { spawn, execFileSync } from 'child_process';
 import { mkdirSync, existsSync, readFileSync, writeFileSync, unlinkSync, copyFileSync } from 'fs';
-import { join, resolve, dirname } from 'path';
+import { join, resolve, dirname, basename } from 'path';
 import { fileURLToPath } from 'url';
 import { v4 as uuidv4 } from 'uuid';
 import ora from 'ora';
@@ -26,6 +26,7 @@ import { prepareWebpage } from './webpage.js';
 import { emptySourceResult } from './source-utils.js';
 import { buildPrompt, buildCollectionPrompt } from './prompt.js';
 import { validateStory } from './validate.js';
+import { parseStageUsage, normalizeUsage, buildGenerationStats } from './usage.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -127,7 +128,7 @@ async function generateWebpageStory(url, options) {
   console.log('📥 Fetching webpage source...');
   const { sourceResult, metadata } = await prepareWebpage(url, workDir);
 
-  const prompt = buildPrompt({
+  const promptParts = buildPrompt({
     arxivId: null,
     arxivUrl: null,
     query: options.query,
@@ -141,7 +142,7 @@ async function generateWebpageStory(url, options) {
   });
 
   await runGenerationPipeline({
-    prompt,
+    promptParts,
     generationDir,
     workDir,
     sourceResult,
@@ -149,6 +150,7 @@ async function generateWebpageStory(url, options) {
     options,
     sourceType: 'webpage',
     sourceUrl: metadata.url,
+    hasTextSource: true,
   });
 }
 
@@ -184,7 +186,7 @@ async function generateLocalStory(options) {
   }
 
   // Build the prompt
-  const prompt = buildPrompt({
+  const promptParts = buildPrompt({
     arxivId: null,
     arxivUrl: null,
     query: options.query,
@@ -199,7 +201,7 @@ async function generateLocalStory(options) {
 
   // Run the shared generation pipeline
   await runGenerationPipeline({
-    prompt,
+    promptParts,
     generationDir,
     workDir,
     sourceResult,
@@ -207,6 +209,7 @@ async function generateLocalStory(options) {
     options,
     sourceType: 'local',
     sourceUrl: null,
+    hasTextSource: false,
   });
 }
 
@@ -250,7 +253,7 @@ async function generateStory(arxivInput, options) {
   }
 
   // Build the prompt
-  const prompt = buildPrompt({
+  const promptParts = buildPrompt({
     arxivId,
     arxivUrl,
     query: options.query,
@@ -265,7 +268,7 @@ async function generateStory(arxivInput, options) {
 
   // Run the shared generation pipeline
   await runGenerationPipeline({
-    prompt,
+    promptParts,
     generationDir,
     workDir,
     sourceResult,
@@ -273,6 +276,7 @@ async function generateStory(arxivInput, options) {
     options,
     sourceType: 'arxiv',
     sourceUrl: arxivUrl,
+    hasTextSource: sourceResult.hasSource,
   });
 }
 
@@ -379,14 +383,14 @@ async function generateCollectionStory(options) {
     );
   }
 
-  const prompt = buildCollectionPrompt({ sources, query: options.query, generationDir });
+  const promptParts = buildCollectionPrompt({ sources, query: options.query, generationDir });
 
   const pdfArtifacts = sources
     .filter(s => s.pdfPath)
     .map(s => ({ sourceId: s.id, path: s.pdfPath }));
 
   await runGenerationPipeline({
-    prompt,
+    promptParts,
     generationDir,
     workDir,
     options,
@@ -394,6 +398,7 @@ async function generateCollectionStory(options) {
     sourceUrl: null,
     addDirs: [generationDir, workDir],
     pdfArtifacts,
+    hasTextSource: sources.some(s => s.hasSource),
   });
 }
 
@@ -408,7 +413,9 @@ async function generateCollectionStory(options) {
  *                                           stories there is one per source; for single-source
  *                                           flows it defaults to the single pdfPath (sourceId null).
  */
-async function runGenerationPipeline({ prompt, generationDir, workDir, sourceResult, pdfPath, options, sourceType, sourceUrl, addDirs, pdfArtifacts }) {
+async function runGenerationPipeline({ promptParts, generationDir, workDir, sourceResult, pdfPath, options, sourceType, sourceUrl, addDirs, pdfArtifacts, hasTextSource }) {
+  const { shared, stages: stageInstructions } = promptParts;
+
   // Directories the per-stage agents are allowed to read.
   const dirs = addDirs || [
     generationDir,
@@ -418,73 +425,76 @@ async function runGenerationPipeline({ prompt, generationDir, workDir, sourceRes
   // PDFs to copy out at publish/save time.
   const artifacts = pdfArtifacts || (pdfPath ? [{ sourceId: null, path: pdfPath }] : []);
 
-  // Write prompt for debugging
-  writeFileSync(join(generationDir, '_prompt.md'), prompt);
+  // Write the full prompt (shared prefix + every stage block) for debugging.
+  const debugPrompt = [shared, ...Object.entries(stageInstructions).map(([k, v]) => `\n\n=== STAGE: ${k} ===\n${v}`)].join('');
+  writeFileSync(join(generationDir, '_prompt.md'), debugPrompt);
 
   console.log('\n🤖 Launching configured story generation stages...\n');
 
   const spinner = ora({
-    text: 'Stage 1: Exploring sources...',
+    text: 'Stage 0: Indexing source...',
     color: 'cyan',
   }).start();
 
+  // A stage is complete when its expected artifact exists and is well-formed:
+  // structured stages must produce parseable JSON with the expected top-level
+  // key; the prose/marker stages keep the original sentinel-string check. This
+  // is stricter than the old substring marker (a half-written JSON file fails).
+  const jsonComplete = (key) => (p) => fileIsJsonWith(p, key);
+  const markerComplete = (marker) => (p) => hasMarker(p, marker);
+
+  // displayLabel: short viewer label — keep in sync with STAGE_LABELS in
+  // packages/viewer/src/components/GenerationStats.tsx
   const stages = [
     {
-      key: 'exploration',
-      marker: 'EXPLORATION_COMPLETE',
-      output: 'exploration.md',
-      label: 'Stage 1: Exploring sources...',
-      task: 'Run only Stage 1: Source Exploration. Write exploration.md and end it with EXPLORATION_COMPLETE. Do not run later stages.',
+      key: 'index', displayLabel: 'Index', output: 'index.json', label: 'Stage 0: Indexing source...',
+      isComplete: jsonComplete('segments'),
+      skip: (ctx) => !ctx.hasTextSource,
+      skipSentinel: { indexSkipped: true, metadata: {}, segments: [] },
+      skipLabel: 'Stage 0: Indexing skipped (no text source)',
     },
-    {
-      key: 'outline',
-      marker: 'OUTLINE_COMPLETE',
-      output: 'outline.md',
-      label: 'Stage 2: Planning chapter outline...',
-      task: 'Run only Stage 2: Chapter Outline. Read exploration.md first, write outline.md, and end it with OUTLINE_COMPLETE. Do not run later stages.',
-    },
-    {
-      key: 'excerpts',
-      marker: 'EXCERPTS_COMPLETE',
-      output: 'excerpts.md',
-      label: 'Stage 3: Collecting verified excerpts...',
-      task: 'Run only Stage 3: Excerpt Collection. Read exploration.md and outline.md first, write excerpts.md, and end it with EXCERPTS_COMPLETE. Do not run later stages.',
-    },
-    {
-      key: 'verification',
-      marker: 'VERIFICATION_COMPLETE',
-      output: 'verification.md',
-      label: 'Stage 4: Verifying excerpts against source...',
-      task: 'Run only Stage 4: Verification. Read exploration.md, outline.md, and excerpts.md first, write verification.md, and end it with VERIFICATION_COMPLETE. Do not run later stages.',
-    },
-    {
-      key: 'explanations',
-      marker: 'EXPLANATIONS_COMPLETE',
-      output: 'explanations.md',
-      label: 'Stage 5: Writing explanations...',
-      task: 'Run only Stage 5: Explanation Writing. Read all prior stage files first, write explanations.md, and end it with EXPLANATIONS_COMPLETE. Do not run later stages.',
-    },
-    {
-      key: 'assemble',
-      marker: 'DONE',
-      output: 'DONE',
-      label: 'Stage 6: Assembling final story...',
-      task: 'Run only Stage 6: Final Assembly. Read all prior stage files first, write story.json, then write DONE containing exactly DONE.',
-    },
+    { key: 'exploration',  displayLabel: 'Exploration',  output: 'exploration.md',    label: 'Stage 1: Exploring sources...',                  isComplete: markerComplete('EXPLORATION_COMPLETE') },
+    { key: 'outline',      displayLabel: 'Outline',      output: 'outline.json',      label: 'Stage 2: Planning chapter outline...',           isComplete: jsonComplete('chapters') },
+    { key: 'excerpts',     displayLabel: 'Excerpts',     output: 'excerpts.json',     label: 'Stage 3: Collecting excerpts...',                isComplete: jsonComplete('chapters') },
+    { key: 'verification', displayLabel: 'Verification', output: 'verification.json', label: 'Stage 4: Verifying excerpts against source...', isComplete: jsonComplete('chapters') },
+    { key: 'explanations', displayLabel: 'Explanations', output: 'explanations.json', label: 'Stage 5: Writing explanations...',              isComplete: jsonComplete('chapters') },
+    { key: 'assemble',     displayLabel: 'Assembly',     output: 'DONE',              label: 'Stage 6: Assembling final story...',             isComplete: markerComplete('DONE') },
   ];
+
+  // Per-stage token usage, collected for story.generation so the viewer can
+  // surface model + token cost per stage on the overview page.
+  const stageUsages = [];
+  // Stage keys where parseStageUsage returned null (usage envelope missing or
+  // format changed). Surfaced in story.generation.parseErrors so the viewer can
+  // flag degraded telemetry rather than silently showing "—" everywhere.
+  const parseErrors = [];
 
   try {
     for (const stage of stages) {
-      spinner.text = `${stage.label} [${options.config.models[stage.key]}]`;
-      await runConfiguredStage({
-        prompt: buildStagePrompt(prompt, stage.task),
-        model: options.config.models[stage.key],
+      const model = options.config.models[stage.key];
+      const expectedPath = join(generationDir, stage.output);
+
+      if (stage.skip?.({ hasTextSource })) {
+        if (stage.skipSentinel != null && !existsSync(expectedPath)) {
+          writeFileSync(expectedPath, JSON.stringify(stage.skipSentinel, null, 2));
+        }
+        spinner.text = stage.skipLabel ?? `${stage.label} [skipped]`;
+        stageUsages.push({ key: stage.key, displayLabel: stage.displayLabel, model: null, ...normalizeUsage(null) });
+        continue;
+      }
+
+      spinner.text = `${stage.label} [${model}]`;
+      const { usage } = await runConfiguredStage({
+        prompt: buildStagePrompt(shared, stageInstructions[stage.key]),
+        model,
         dirs,
         workDir,
-        expectedPath: join(generationDir, stage.output),
-        marker: stage.marker,
+        expectedPath,
+        isComplete: () => stage.isComplete(expectedPath),
         stageLabel: stage.label,
       });
+      if (usage === null) parseErrors.push(stage.key);
+      stageUsages.push({ key: stage.key, displayLabel: stage.displayLabel, model: model ?? null, ...normalizeUsage(usage) });
     }
   } catch (err) {
     spinner.fail('Generation failed');
@@ -508,6 +518,10 @@ async function runGenerationPipeline({ prompt, generationDir, workDir, sourceRes
     spinner.fail(`Invalid story.json: ${err.message}`);
     process.exit(1);
   }
+
+  // Attach per-stage token usage + totals so the viewer can show how the story
+  // was generated (model + tokens per stage) on its first page.
+  story.generation = buildGenerationStats(stageUsages, parseErrors);
 
   // Record which chat model this story was built with so the viewer can use
   // the same model for routing and labeling regardless of startup config.
@@ -561,26 +575,31 @@ function assignPdfFilenames(story, slug, artifacts) {
   return outputs;
 }
 
-function buildStagePrompt(fullPrompt, task) {
-  return `${fullPrompt}
+function buildStagePrompt(shared, stageInstructions) {
+  // Shared prefix first — byte-identical across stages so the model's prompt
+  // cache can reuse it on back-to-back runs — then ONLY this stage's block.
+  return `${shared}
 
 ## Current Stage Execution
+Run ONLY the stage below. Preserve the schema and constraints from the instructions above, but do not
+perform any other stage. When done, write exactly the file(s) the stage names — nothing else.
 
-${task}
-
-Important: this invocation is one stage in a multi-agent pipeline. Preserve the schema and constraints from the full Paper Stories instructions above, but do not perform future stages.`;
+${stageInstructions}`;
 }
 
-function runConfiguredStage({ prompt, model, dirs, workDir, expectedPath, marker, stageLabel }) {
+function runConfiguredStage({ prompt, model, dirs, workDir, expectedPath, isComplete, stageLabel }) {
   if (model?.startsWith('claude-')) {
-    return runClaudeStage({ prompt, model, dirs, expectedPath, marker, stageLabel });
+    return runClaudeStage({ prompt, model, dirs, expectedPath, isComplete, stageLabel });
   }
-  return runCodexStage({ prompt, model, dirs, cwd: workDir, expectedPath, marker, stageLabel });
+  return runCodexStage({ prompt, model, dirs, cwd: workDir, expectedPath, isComplete, stageLabel });
 }
 
-function runClaudeStage({ prompt, model, dirs, expectedPath, marker, stageLabel }) {
+function runClaudeStage({ prompt, model, dirs, expectedPath, isComplete, stageLabel }) {
   const allowedTools = 'Read,Grep,Glob,Write';
-  const args = ['-p', '--allowedTools', allowedTools];
+  // --output-format json makes the final stdout a single JSON envelope carrying
+  // the run's token usage, which we parse for per-stage token tracking. Content
+  // is written to files by the agent, so this only changes stdout.
+  const args = ['-p', '--output-format', 'json', '--allowedTools', allowedTools];
   if (model) args.push('--model', model);
   for (const dir of dirs) args.push('--add-dir', dir);
 
@@ -590,14 +609,15 @@ function runClaudeStage({ prompt, model, dirs, expectedPath, marker, stageLabel 
     prompt,
     cwd: process.cwd(),
     expectedPath,
-    marker,
+    isComplete,
     stageLabel,
     model,
+    runner: 'claude',
     notFoundMsg: 'Claude CLI not found. Install it with: npm install -g @anthropic-ai/claude-code',
   });
 }
 
-function runCodexStage({ prompt, model, dirs, cwd, expectedPath, marker, stageLabel }) {
+function runCodexStage({ prompt, model, dirs, cwd, expectedPath, isComplete, stageLabel }) {
   const args = ['exec'];
   if (model) args.push('--model', model);
   args.push('--sandbox', 'danger-full-access', '-C', cwd);
@@ -610,14 +630,15 @@ function runCodexStage({ prompt, model, dirs, cwd, expectedPath, marker, stageLa
     prompt,
     cwd,
     expectedPath,
-    marker,
+    isComplete,
     stageLabel,
     model,
+    runner: 'codex',
     notFoundMsg: 'Codex CLI not found. Install it with: npm install -g @openai/codex',
   });
 }
 
-function runAgentProcess({ command, args, prompt, cwd, expectedPath, marker, stageLabel, model, notFoundMsg }) {
+function runAgentProcess({ command, args, prompt, cwd, expectedPath, isComplete, stageLabel, model, runner, notFoundMsg }) {
   return new Promise((resolvePromise, rejectPromise) => {
     const cleanEnv = { ...process.env };
     delete cleanEnv.CLAUDECODE;
@@ -654,12 +675,14 @@ function runAgentProcess({ command, args, prompt, cwd, expectedPath, marker, sta
     proc.stderr.on('data', (data) => { stderr += data.toString(); });
 
     proc.on('close', (code) => {
-      if (hasMarker(expectedPath, marker)) {
-        settle(null, { stdout, stderr });
+      // Best-effort token accounting; never let a usage-parse failure fail a stage.
+      const usage = parseStageUsage(stdout, runner);
+      if (isComplete()) {
+        settle(null, { stdout, stderr, usage });
         return;
       }
 
-      let message = `${stageLabel} did not produce expected marker ${marker} (exit code: ${code})`;
+      let message = `${stageLabel} did not produce a well-formed ${basename(expectedPath)} (exit code: ${code})`;
       if (model) message += ` [model: ${model}]`;
       if (stderr) message += `\nstderr: ${stderr.slice(0, 500)}`;
       if (stdout) message += `\nstdout: ${stdout.slice(0, 500)}`;
@@ -685,6 +708,23 @@ function hasMarker(filePath, marker) {
   if (!existsSync(filePath)) return false;
   try {
     return readFileSync(filePath, 'utf8').includes(marker);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * A structured stage is complete only when its output file exists AND parses as
+ * JSON AND carries the expected top-level key as an array. This is stricter than a
+ * substring marker: a half-written or truncated JSON file, or one where the key
+ * maps to null/string instead of an array, is treated as a failed stage.
+ */
+function fileIsJsonWith(filePath, requiredKey) {
+  if (!existsSync(filePath)) return false;
+  try {
+    const data = JSON.parse(readFileSync(filePath, 'utf8'));
+    if (requiredKey && (data === null || typeof data !== 'object' || !Array.isArray(data[requiredKey]))) return false;
+    return true;
   } catch {
     return false;
   }

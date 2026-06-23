@@ -64,22 +64,39 @@ The CLI includes packaged defaults in `packages/cli/config.yaml`:
 
 ```yaml
 models:
-  exploration: claude-sonnet-4-6
+  index: claude-haiku-4-5
+  exploration: gpt-5.4
   outline: claude-sonnet-4-6
   excerpts: claude-sonnet-4-6
-  verification: claude-sonnet-4-6
-  explanations: claude-sonnet-4-6
-  assemble: claude-sonnet-4-6
+  verification: claude-haiku-4-5
+  explanations: claude-opus-4-6
+  assemble: claude-haiku-4-5
   chat: gpt-5.4
 ```
 
-Generation is now run as six configured subprocess stages. Models whose names
-start with `claude-` run through Claude Code; all other model names run through
-Codex. Override models for one generation with:
+Generation runs as **seven configured subprocess stages**: `index` → `exploration`
+→ `outline` → `excerpts` → `verification` → `explanations` → `assemble`. Models
+whose names start with `claude-` run through Claude Code; all other model names run
+through Codex. The mechanical stages (`index`, `verification`, `assemble`) default
+to the cheaper `claude-haiku-4-5`. Override models for one generation with:
 
 ```bash
-node index.js generate 1706.03762 --models exploration=gpt-5.4,explanations=claude-sonnet-4-6
+node index.js generate --mode paper 1706.03762 --models index=claude-sonnet-4-6,explanations=claude-opus-4-6
 ```
+
+**Stage 0 — source index.** The first stage builds a grep-anchored `index.json`
+map of the source (sections, theorems, equations, figures, with a verbatim
+`anchor` string and metadata). Later stages read it to locate just the regions
+they need (`Grep` the anchor, then `Read`) instead of re-scanning the whole
+source, and hand off through structured JSON (`outline.json`, `excerpts.json`,
+`verification.json`, `explanations.json`). The shared instruction preamble is
+also kept byte-identical and placed first in every stage prompt so the model's
+prompt cache can reuse it across back-to-back stages.
+
+**Token tracking.** Each stage's model and token usage are captured and stored on
+the story as `generation` (`{ stages: [{ key, model, inputTokens, outputTokens,
+costUsd, … }], totals }`). The viewer surfaces this as a per-stage table on the
+overview (first) page.
 
 ### View stories
 
@@ -105,7 +122,8 @@ packages/
 ├── cli/           # Story generation CLI
 │   ├── index.js              # Main entry point (Commander.js)
 │   ├── arxiv.js              # arXiv source extraction
-│   ├── prompt.js             # 6-stage generation prompt
+│   ├── prompt.js             # 7-stage generation prompt (shared prefix + per-stage blocks)
+│   ├── usage.js              # Per-stage token-usage parsing & rollup
 │   ├── validate.js           # Story JSON validation (incl. pdfRegion)
 │   └── extract_regions.py    # PDF text block extraction with bounding boxes
 └── viewer/        # Static React viewer
@@ -132,6 +150,12 @@ packages/
   "arxivUrl": "https://arxiv.org/abs/2401.12345",
   "query": "optional focus query",
   "createdAt": "2026-03-05T00:00:00.000Z",
+  "generation": {                               // optional; per-stage model + token usage (shown on the overview page)
+    "stages": [
+      { "key": "index", "model": "claude-haiku-4-5", "inputTokens": 12000, "outputTokens": 800, "costUsd": 0.016 }
+    ],
+    "totals": { "inputTokens": 120000, "outputTokens": 9000, "totalTokens": 129000, "costUsd": 0.42 }
+  },
   "sources": [                                  // optional; present for multi-source "collection" stories
     {
       "id": "s1",

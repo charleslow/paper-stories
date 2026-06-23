@@ -4,22 +4,62 @@
  * Sent to Claude/Codex to generate a story.json from paper/textbook/webpage sources.
  * The prompt enforces source fidelity — all excerpts must be verbatim from the source.
  *
+ * Token-efficiency design
+ * -----------------------
+ * The pipeline runs as independent subprocesses, one per stage. To avoid paying
+ * for the full multi-stage instruction set on every stage, both builders return
+ * a structured `{ shared, stages }` object instead of one monolithic string:
+ *
+ *   - `shared`  — the byte-identical preamble (role, mode, source pointers, the
+ *                 no-hallucination rule, the artifact map). It is placed FIRST in
+ *                 every stage prompt so the identical prefix can be reused by the
+ *                 model's prompt cache across back-to-back stages.
+ *   - `stages`  — one instruction block per stage. Only the current stage's block
+ *                 is appended, so a stage never carries instructions for stages it
+ *                 won't run.
+ *
+ * Stages hand off through structured JSON files (index.json, outline.json,
+ * excerpts.json, verification.json, explanations.json) keyed by chapter, plus a
+ * grep-able `index.json` source map, so later stages read only what they need
+ * instead of re-scanning the whole source.
+ *
  * Claude adapts its pacing and style based on the source material:
  * - Research papers → focused deep-dive, ~20 chapters
  * - Textbook chapters → slower pedagogical walkthrough, 30-40 chapters
  */
 
 /**
+ * Shared "how to use the source index" note included in every stage's preamble.
+ * The index uses line numbers as hard demarcators for text files (.tex/.md) so
+ * downstream stages can Read exact ranges without Grep. For PDF-only sources the
+ * index is skipped and segments is an empty array.
+ */
+const INDEX_USAGE = `## Source Index (index.json)
+Stage 0 writes a structured map of the source to \`index.json\` in the generation directory.
+Every later stage should read it FIRST to navigate the source instead of re-reading everything.
+When indexing was possible (text source available), each entry in \`segments\` has:
+- \`id\` — stable short id (e.g. "seg-12")
+- \`kind\` — section | subsection | definition | theorem | lemma | proof | equation | figure | table | other
+- \`label\` — human label (e.g. "Section 3.2", "Theorem 1", "Figure 4")
+- \`sourceFile\` — relative path to the .tex or .md file the segment lives in
+- \`lineStart\` / \`lineEnd\` — EXACT 1-indexed line range in sourceFile. Pull a segment with
+  Read(sourceFile, { offset: lineStart - 1, limit: lineEnd - lineStart + 1 }).
+- \`page\` — 0-indexed PDF page if known (optional)
+When \`index.json\` carries \`"indexSkipped": true\` or an empty \`segments\` array, no text source
+was available — navigate the PDF or source files directly without an index.`;
+
+/**
  * Build the generation prompt for a multi-source ("collection") story that
  * weaves together several papers / PDFs / webpages and cites all of them.
  *
- * Drives the SAME six stages and checkpoint markers as buildPrompt() so the
- * pipeline in index.js can run it stage-by-stage unchanged. The key
+ * Returns `{ shared, stages }` driving the SAME seven stages (index → exploration
+ * → outline → excerpts → verification → explanations → assemble) as buildPrompt()
+ * so the pipeline in index.js can run it stage-by-stage unchanged. The key
  * differences from single-source mode:
  *   - a top-level `sources` array is emitted (summarized "at the front")
  *   - every excerpt carries a `sourceId` tying it back to one source
  *   - each source has its own files, PDF, and regions index; `pdfRegion.page`
- *     is relative to that source's PDF
+ *     is relative to that source's PDF, and index.json segments carry `sourceId`
  *
  * @param {Object}   args
  * @param {Array}    args.sources       - per-source descriptors (see index.js)
@@ -51,7 +91,7 @@ export function buildCollectionPrompt({ sources, query, generationDir }) {
 
   const idList = sources.map(s => `\`${s.id}\``).join(', ');
 
-  return `You are a Paper Stories generator working in MULTI-SOURCE mode. Your job is to create a single,
+  const shared = `You are a Paper Stories generator working in MULTI-SOURCE mode. Your job is to create a single,
 coherent walkthrough that synthesizes and cross-references SEVERAL sources, citing each one.
 
 ## Story Mode: Collection (multiple sources)
@@ -80,6 +120,10 @@ ${sourceBlocks}
 ## Generation Directory
 Write all intermediate and final files to: ${generationDir}
 
+${INDEX_USAGE}
+In collection mode every index.json segment ALSO carries a \`sourceId\` (one of ${idList}) and its
+\`page\` is relative to that source's own PDF.
+
 ## CRITICAL RULE: NO HALLUCINATION
 Every excerpt you include MUST be grounded in ONE specific source's files.
 - \`latexSource\` must be copied VERBATIM from that source — character for character (for webpages, the
@@ -90,55 +134,113 @@ Every excerpt you include MUST be grounded in ONE specific source's files.
 - NEVER attribute a quote to the wrong source. \`sourceId\` must match where \`latexSource\` actually lives.
 - Do NOT invent claims, equations, or cross-source comparisons not supported by the sources.
 
-## Pipeline
+## Pipeline & Artifacts
+Each stage reads the prior artifacts and writes its own. You run exactly ONE stage per invocation —
+do not perform other stages. The hand-off files (relative to the generation directory):
+- \`index.json\`        (Stage 0) — grep-anchored source map, segments tagged with sourceId
+- \`exploration.md\`    (Stage 1) — per-source findings + a Connections section
+- \`outline.json\`      (Stage 2) — chapter plan referencing index segment ids
+- \`excerpts.json\`     (Stage 3) — collected excerpts keyed by chapter
+- \`verification.json\` (Stage 4) — verified/corrected excerpts keyed by chapter
+- \`explanations.json\` (Stage 5) — chapter explanations keyed by chapter
+- \`story.json\` + \`DONE\` (Stage 6) — final assembled story`;
 
-Execute these stages in order, writing checkpoint files after each.
+  const stages = {
+    index: `### Stage 0: Source Index
+Build a line-demarcated map of every source that has text files (.tex or .md) so later stages can
+navigate without re-reading everything. For PDF-only sources, skip segments (they will be read
+directly from the PDF). Read each text source in turn and catalogue its segments: sections,
+definitions, theorems, lemmas, key equations, figures, tables. For EACH segment record \`id\`, \`kind\`,
+\`label\`, \`sourceId\` (one of ${idList}), \`sourceFile\`, \`lineStart\`/\`lineEnd\` (EXACT 1-indexed line
+range — later stages use Read(sourceFile, { offset: lineStart - 1, limit: lineEnd - lineStart + 1 })),
+and \`page\` (0-indexed in THAT source's PDF) when known. Also extract per source: title, authors (as
+written), publication month+year, and institutions.
+Write valid JSON to ${generationDir}/index.json:
+\`\`\`json
+{
+  "sources": [
+    { "id": "<one of ${idList}>", "title": "", "authors": [], "publishedYear": null, "publishedMonth": null, "institutions": [] }
+  ],
+  "segments": [
+    { "id": "seg-1", "kind": "theorem", "label": "Theorem 1", "sourceId": "s1", "sourceFile": "main.tex", "lineStart": 87, "lineEnd": 142, "page": null }
+  ]
+}
+\`\`\`
+Output ONLY valid JSON to the file (no prose, no markers).`,
 
-### Stage 1: Source Exploration
-- Explore EACH source in turn (read its .tex / page.md / PDF). Keep findings grouped per source id.
-- For EACH source extract: a concise title, authors (as written), publication month+year, and
+    exploration: `### Stage 1: Source Exploration
+Read ${generationDir}/index.json FIRST to orient, then read the regions of each source that matter.
+- Explore EACH source in turn (read its .tex / page.md / PDF), navigating via index line ranges when available.
+- For EACH source confirm: a concise title, authors (as written), publication month+year, and
   institutions/affiliations if listed.
 - Note the throughline: what connects these sources? Where do they agree, differ, or build on each other?
 - Write findings to ${generationDir}/exploration.md, organized per source plus a "Connections" section.
-- End the file with the line: EXPLORATION_COMPLETE
+- End the file with the line: EXPLORATION_COMPLETE`,
 
-### Stage 2: Chapter Outline
-Design chapters per the Collection structure above. For each planned chapter, note which source(s) it
-will draw excerpts from. First chapter = Overview (no excerpts, introduces all sources). Last chapter =
-Summary (no excerpts). One clear teaching point per chapter. Chapter labels: 2-4 words.
-Write to ${generationDir}/outline.md and end with: OUTLINE_COMPLETE
+    outline: `### Stage 2: Chapter Outline
+Read ${generationDir}/index.json and ${generationDir}/exploration.md first. Design chapters per the
+Collection structure above. First chapter = Overview (no excerpts, introduces all sources). Last
+chapter = Summary (no excerpts). One clear teaching point per chapter; chapter labels 2-4 words. For
+each chapter note which source(s) and which index segment ids it will draw excerpts from.
+Write valid JSON to ${generationDir}/outline.json:
+\`\`\`json
+{
+  "chapters": [
+    { "id": "chapter-0", "label": "Overview", "teachingPoint": "", "segmentIds": [], "sourceIds": [] }
+  ]
+}
+\`\`\`
+Output ONLY valid JSON to the file.`,
 
-### Stage 3: Excerpt Collection
-For each chapter, collect 1-3 excerpts. Each excerpt is one of: \`text\`, \`equation\`, or \`figure\`.
-For EACH excerpt:
-1. Read the specific source file containing it.
+    excerpts: `### Stage 3: Excerpt Collection
+Read ${generationDir}/index.json and ${generationDir}/outline.json first. For each chapter, collect
+1-3 excerpts (first and last chapters: 0). For each planned segment, Read its \`sourceFile\` at the
+given \`lineStart\`/\`lineEnd\` range; fall back to Grep when no index segment exists (PDF-only sources).
+Each excerpt is one of: \`text\`, \`equation\`, or \`figure\`. For EACH excerpt:
+1. Read the specific source file containing it (use the index line range, or Grep for PDF-only sources).
 2. Copy the EXACT raw source into \`latexSource\` — character for character.
 3. Set \`sourceId\` to that source's id, and \`sourceFile\` to the relative path within that source.
 4. Write a KaTeX-renderable \`content\` (clean text for text/figure caption; pure KaTeX LaTeX for equation).
-5. **PDF region mapping**: if the source has a regions index, find the matching block and set
-   \`pdfRegion\` to \`{ "page": <0-indexed page in THAT source's PDF>, "bbox": [x0,y0,x1,y1] }\`. The page
-   number is relative to the excerpt's own source PDF. Omit \`pdfRegion\` if no match (it is optional).
+5. PDF region mapping: if the source has a regions index, find the matching block and set
+   \`pdfRegion\` to \`{ "page": <0-indexed page in THAT source's PDF>, "bbox": [x0,y0,x1,y1] }\`. Omit if no match.
    For figure excerpts, match against \`type: "image"\` blocks near the caption.
 - text vs equation: if prose and math are mixed, use \`text\` (it renders \`$...$\` and \`$$...$$\`).
 - For webpage figure excerpts, set \`visualUrl\` to a real image URL from that source's page-metadata.json.
-Write to ${generationDir}/excerpts.md and end with: EXCERPTS_COMPLETE
+Write valid JSON to ${generationDir}/excerpts.json:
+\`\`\`json
+{
+  "chapters": [
+    { "id": "chapter-1", "excerpts": [ { "content": "", "latexSource": "", "type": "text", "sourceId": "s1", "sourceFile": "", "label": "", "visualUrl": null, "pdfRegion": null } ] }
+  ]
+}
+\`\`\`
+Output ONLY valid JSON to the file.`,
 
-### Stage 4: Verification
-For EVERY excerpt: confirm \`latexSource\` exists verbatim in the source named by its \`sourceId\` (Grep the
-.tex files / page.md / re-read the PDF page). Confirm the \`sourceId\` is correct — a quote attributed to
-the wrong source is a hallucination and must be fixed or removed. For equations, confirm \`content\` is
-mathematically equivalent to \`latexSource\`. Remove or replace any excerpt that cannot be verified.
-Write to ${generationDir}/verification.md and end with: VERIFICATION_COMPLETE
+    verification: `### Stage 4: Verification
+Read ${generationDir}/excerpts.json. For EVERY excerpt: confirm \`latexSource\` exists verbatim in the
+source named by its \`sourceId\` (Grep the .tex files / page.md / re-read the PDF page). Confirm the
+\`sourceId\` is correct — a quote attributed to the wrong source is a hallucination and must be fixed or
+removed. For equations, confirm \`content\` is mathematically equivalent to \`latexSource\`. Remove or
+replace any excerpt that cannot be verified.
+Write the verified/corrected excerpts (SAME shape as excerpts.json) to ${generationDir}/verification.json.
+Output ONLY valid JSON to the file.`,
 
-### Stage 5: Explanation Writing
-Write each chapter's explanation markdown. Make explanations self-contained (inline the key idea; do not
-write "as shown in the excerpt above"). Ground formalism in intuition. Use KaTeX ($...$ inline, $$...$$
-display). Cross-reference chapters AND sources by name ("Whereas Source A frames this as..., Source B...").
-When a chapter draws on multiple sources, make the comparison explicit. Interpret, don't just describe.
-Write to ${generationDir}/explanations.md and end with: EXPLANATIONS_COMPLETE
+    explanations: `### Stage 5: Explanation Writing
+Read ${generationDir}/outline.json and ${generationDir}/verification.json. Write each chapter's
+explanation markdown. Make explanations self-contained (inline the key idea; do not write "as shown in
+the excerpt above"). Ground formalism in intuition. Use KaTeX ($...$ inline, $$...$$ display).
+Cross-reference chapters AND sources by name ("Whereas Source A frames this as..., Source B..."). When a
+chapter draws on multiple sources, make the comparison explicit. Interpret, don't just describe.
+Write valid JSON to ${generationDir}/explanations.json:
+\`\`\`json
+{ "chapters": [ { "id": "chapter-0", "explanation": "" } ] }
+\`\`\`
+Output ONLY valid JSON to the file.`,
 
-### Stage 6: Final Assembly
-Assemble everything into ${generationDir}/story.json with this schema:
+    assemble: `### Stage 6: Final Assembly
+Read ${generationDir}/index.json, ${generationDir}/outline.json, ${generationDir}/verification.json,
+and ${generationDir}/explanations.json, then assemble everything into ${generationDir}/story.json with
+this schema:
 \`\`\`json
 {
   "id": "<generated-uuid>",
@@ -186,19 +288,16 @@ Assemble everything into ${generationDir}/story.json with this schema:
 **Validation before writing:**
 1. \`sources\` includes EVERY id in ${idList}, each with a title (authors/year/institutions where known).
 2. Every non-Overview/Summary excerpt has a \`sourceId\` that appears in \`sources\`.
-3. Every excerpt's \`latexSource\` is non-empty and verified against the source named by its \`sourceId\`.
+3. Every excerpt's \`latexSource\` is non-empty and came from verification.json.
 4. First (Overview) and last (Summary) chapters have \`excerpts: []\`; all others have 1-3 excerpts.
 5. Chapter ids are sequential (chapter-0, chapter-1, ...); labels are 2-4 words.
 6. All KaTeX is valid; no hallucinated claims; no \`pdfRegion\` unless it came from a regions index.
 7. Do NOT set \`pdfFile\` on sources — the CLI fills that in after assembly.
 
-Write ${generationDir}/story.json, then create ${generationDir}/DONE containing exactly "DONE".
+Write ${generationDir}/story.json, then create ${generationDir}/DONE containing exactly "DONE".`,
+  };
 
-## Important Notes
-- Take your time; read each source thoroughly before writing.
-- When in doubt, include MORE context in \`latexSource\`, not less.
-- Never mix up which source a quote came from — \`sourceId\` accuracy is as important as verbatim quoting.
-`;
+  return { shared, stages };
 }
 
 export function buildPrompt({
@@ -299,8 +398,10 @@ Use this to assign \`pdfRegion\` fields to excerpts (see Stage 3 for details).`
   "arxivUrl": null,
   "sourceType": "local",`;
 
+  const sourceWord = isWebpage ? 'webpage file' : hasSource ? '.tex file' : 'PDF page';
+  const rawWord = isWebpage ? 'webpage text/HTML' : hasSource ? 'LaTeX' : 'text';
 
-  return `You are a Paper Stories generator. Your job is to create a deep, technically rigorous walkthrough
+  const shared = `You are a Paper Stories generator. Your job is to create a deep, technically rigorous walkthrough
 of the source material, structured as an interactive story.
 
 ${modeSection}
@@ -315,6 +416,8 @@ ${pdfInstructions}${regionsInstructions}
 
 ## Generation Directory
 Write all intermediate and final files to: ${generationDir}
+
+${INDEX_USAGE}
 
 ## CRITICAL RULE: NO HALLUCINATION
 Every excerpt you include MUST be grounded in the source files.
@@ -334,37 +437,82 @@ ${!hasSource ? `\nSince no LaTeX source is available, use the PDF as your primar
 - For equations, reconstruct the LaTeX from the PDF rendering
 - The verification stage will check against PDF text regions instead of .tex files` : ''}
 
-## Pipeline
+## Pipeline & Artifacts
+Each stage reads the prior artifacts and writes its own. You run exactly ONE stage per invocation —
+do not perform other stages. The hand-off files (relative to the generation directory):
+- \`index.json\`        (Stage 0) — grep-anchored source map + document metadata
+- \`exploration.md\`    (Stage 1) — narrative findings / structure map
+- \`outline.json\`      (Stage 2) — chapter plan referencing index segment ids
+- \`excerpts.json\`     (Stage 3) — collected excerpts keyed by chapter
+- \`verification.json\` (Stage 4) — verified/corrected excerpts keyed by chapter
+- \`explanations.json\` (Stage 5) — chapter explanations keyed by chapter
+- \`story.json\` + \`DONE\` (Stage 6) — final assembled story`;
 
-Execute these stages in order, writing checkpoint files after each:
+  const stages = {
+    index: `### Stage 0: Source Index
+Build a line-demarcated map of the ${isWebpage ? 'webpage source (page.md and page-metadata.json)' : 'LaTeX source (.tex files)'} so later stages can navigate without re-reading
+everything. Read each source file and catalogue its segments: sections, definitions, theorems, lemmas,
+key equations, figures, tables. For EACH segment record:
+- \`id\` — stable short id ("seg-1", "seg-2", ...)
+- \`kind\` — section | subsection | definition | theorem | lemma | proof | equation | figure | table | other
+- \`label\` — human label ("Section 3.2", "Theorem 1", "Figure 4")
+- \`sourceFile\` — relative path to the source file (e.g. "main.tex" or "page.md")
+- \`lineStart\`/\`lineEnd\` — EXACT 1-indexed line range in sourceFile. Later stages pull the segment
+  with Read(sourceFile, { offset: lineStart - 1, limit: lineEnd - lineStart + 1 }).
+- \`page\` — 0-indexed PDF page if known (optional, null otherwise)
+Also extract document metadata from the title page / abstract / author block: title, authors (full
+names as written), publication month+year, institutions/affiliations (deduplicated).
+Write valid JSON to ${generationDir}/index.json:
+\`\`\`json
+{
+  "metadata": { "title": "", "authors": [], "publishedYear": null, "publishedMonth": null, "institutions": [] },
+  "segments": [
+    { "id": "seg-1", "kind": "section", "label": "Section 1", "sourceFile": "main.tex", "lineStart": 42, "lineEnd": 120, "page": null }
+  ]
+}
+\`\`\`
+Output ONLY valid JSON to the file (no prose, no markers).`,
 
-### Stage 1: Source Exploration
-- ${isWebpage ? 'Read page.md and page-metadata.json thoroughly; use page.html only when the readable extraction needs confirmation' : hasSource ? 'Read all .tex files (start with main .tex, follow \\\\input{} / \\\\include{} references)' : 'Read the PDF thoroughly, page by page'}
+    exploration: `### Stage 1: Source Exploration
+Read ${generationDir}/index.json FIRST to orient, then read the regions of the source that matter,
+navigating via the index line numbers (Read sourceFile at lineStart/lineEnd) when segments are present.
+- ${isWebpage ? 'Read page.md and page-metadata.json thoroughly; use page.html only when the readable extraction needs confirmation' : hasSource ? 'Read the key .tex regions (start with the main .tex, follow \\\\input{} / \\\\include{} references) using the index line ranges to jump to sections' : 'Read the PDF thoroughly, page by page'}
 - ${hasPdf && hasSource ? 'Read the PDF for overview context' : ''}
 - Map the structure: sections, key equations, theorems, algorithms, tables, figures
-- **Extract paper metadata** from the title page, abstract, or author block:
+- **Confirm paper metadata** from the index / title page / abstract / author block:
   - Authors: full names as they appear in the paper
-  - Publication date: month and year (check submission date, conference proceedings, journal volume, or arXiv date)
+  - Publication date: month and year (submission date, conference proceedings, journal volume, or arXiv date)
   - Institutions/affiliations: for each author if listed (deduplicate)
 - Write findings to ${generationDir}/exploration.md
-- End the file with the line: EXPLORATION_COMPLETE
+- End the file with the line: EXPLORATION_COMPLETE`,
 
-### Stage 2: Chapter Outline
-Design chapters that best serve the user's query and the source content.
-
-Follow the chapter count and structure from your Story Mode guidelines above.
+    outline: `### Stage 2: Chapter Outline
+Read ${generationDir}/index.json and ${generationDir}/exploration.md first. Design chapters that best
+serve the user's query and the source content. Follow the chapter count and structure from your Story
+Mode guidelines above.
 
 **Required constraints**:
 - First chapter: Overview (no excerpts) — orient the reader
 - Last chapter: Summary (no excerpts) — key takeaways
 - Each chapter should have ONE clear teaching point
 - Chapter labels: 2-4 words (for sidebar)
+- For each chapter, note which index segment ids it will draw its excerpt(s) from
 
-Write the outline to ${generationDir}/outline.md
-End the file with: OUTLINE_COMPLETE
+Write valid JSON to ${generationDir}/outline.json:
+\`\`\`json
+{
+  "chapters": [
+    { "id": "chapter-0", "label": "Overview", "teachingPoint": "", "segmentIds": [] }
+  ]
+}
+\`\`\`
+Output ONLY valid JSON to the file.`,
 
-### Stage 3: Excerpt Collection
-For each chapter, find and collect excerpts from the source:
+    excerpts: `### Stage 3: Excerpt Collection
+Read ${generationDir}/index.json and ${generationDir}/outline.json first. For each chapter, collect its
+excerpts from the source (first and last chapters: 0). For each planned segment, Read its \`sourceFile\`
+at the given \`lineStart\`/\`lineEnd\` range (Read(sourceFile, { offset: lineStart - 1, limit: lineEnd - lineStart + 1 }))
+to pull the content; fall back to Grep when no index is available.
 
 Each excerpt should be one of:
 - **text**: A key paragraph, definition, or claim (may contain inline or display math)
@@ -376,12 +524,12 @@ Each excerpt should be one of:
 If an excerpt mixes prose with math (e.g., a sentence defining a variable followed by an equation, or a paragraph that includes inline math expressions), it MUST be typed as "text", NOT "equation". The "equation" type is ONLY for excerpts whose entire content is a mathematical expression — no natural-language sentences surrounding it. When in doubt, use "text". The text renderer supports both inline math (\`$...$\`) and display math (\`$$...$$\`), so equations embedded in prose will render correctly as text excerpts.
 
 For EACH excerpt you collect:
-1. Read the source ${isWebpage ? 'webpage file' : hasSource ? '.tex file' : 'PDF page'} containing it
-2. Copy the EXACT raw ${isWebpage ? 'webpage text/HTML' : hasSource ? 'LaTeX' : 'text'} into \`latexSource\` — character for character
+1. Read the source ${sourceWord} containing it (use the index line range, or Grep if no index)
+2. Copy the EXACT raw ${rawWord} into \`latexSource\` — character for character
 3. Record which file it came from
 4. Write a KaTeX-renderable version into \`content\` (see below)
 
-**Text excerpts**: \`content\` should be readable text — remove \\cite{}, \\ref{}, \\label{} etc., but KEEP inline math expressions (e.g. \`$\\lambda$\`, \`$x^2$\`, \`$\\text{Text} \\rightarrow \\text{Code}$\`). The viewer renders these with KaTeX. Keep \`latexSource\` as the raw version.
+**Text excerpts**: \`content\` should be readable text — remove \\cite{}, \\ref{}, \\label{} etc., but KEEP inline math expressions (e.g. \`$\\lambda$\`, \`$x^2$\`). Keep \`latexSource\` as the raw version.
 
 **Equation excerpts**: \`content\` should be **clean KaTeX-compatible LaTeX** that renders correctly. The content must be PURE math — no prose text, no sentences. You may adapt from the raw source:
 - Strip \\begin{equation}/\\end{equation} and similar environments — just the math content
@@ -390,7 +538,7 @@ For EACH excerpt you collect:
 - Use \\begin{aligned}...\\end{aligned} for multi-line equations
 - The equation does NOT need to be an exact string match of the source, but MUST be mathematically equivalent
 - Keep \`latexSource\` as the raw verbatim copy from the ${hasSource ? '.tex file' : 'PDF'}
-- If the source passage mixes prose with equations (e.g., "We define X as ... [equation]"), use type "text" instead and embed the math with $...$ or $$...$$ delimiters
+- If the source passage mixes prose with equations, use type "text" instead and embed the math with $...$ or $$...$$ delimiters
 
 **Figure excerpts**: For diagrams, charts, tables, and illustrations:
 - \`content\` should be the figure's caption text (cleaned of LaTeX artifacts, like text excerpts)
@@ -406,44 +554,51 @@ For each excerpt, find the matching block(s) in the regions index and add a \`pd
 3. For **figure excerpts**: search for blocks with \`type: "image"\` on the same page as the figure's caption. Match the image block nearest to (typically just above) the caption text block.
 4. Set \`pdfRegion\` to \`{ "page": <0-indexed page number>, "bbox": [x0, y0, x1, y1] }\`
 5. The bbox values are already normalized to [0, 1] range in the regions index — use them directly
-6. If multiple blocks match (e.g., excerpt spans two blocks), use the first/primary block
+6. If multiple blocks match, use the first/primary block
 7. If no match is found, omit \`pdfRegion\` for that excerpt (it's optional)
-8. Some figures use vector graphics rather than embedded images — these won't appear as image blocks. That's fine, just omit \`pdfRegion\` for those.
+8. Some figures use vector graphics rather than embedded images — these won't appear as image blocks. That's fine, omit \`pdfRegion\`.
 
 **Proof excerpts** (textbook mode only, at most 1-2 per story — skip unless the proof technique is genuinely the insight):
 - \`type\`: \`"proof"\`
 - \`statement\`: The theorem or claim being proved (Markdown + KaTeX)
 - \`label\`: e.g. \`"Theorem 3.1"\` or \`"Lemma 2"\`
 - \`steps\`: array of 4-10 logical steps, each with:
-  - \`content\`: The proof line itself (Markdown + KaTeX) — one logical move per step (definition expansion, inequality application, algebraic step, etc.)
-  - \`explanation\`: (optional) Why this step is valid — the insight, the tool used, what makes it non-obvious. Write for a student who wants to understand, not just follow along.
+  - \`content\`: The proof line itself (Markdown + KaTeX) — one logical move per step
+  - \`explanation\`: (optional) Why this step is valid — the insight, the tool used, what makes it non-obvious
 - Proof excerpts have no \`latexSource\`, \`content\`, or \`pdfRegion\` at the top level
-- The chapter's \`explanation\` field should give a brief overview of the proof strategy (2-4 sentences) — readers see this before clicking into individual steps
 
 Guidelines:
 - Prefer excerpts that teach something concrete — definitions, theorem statements, key equations, illuminating examples
 - For text, include enough context to be meaningful (2-6 sentences)
 - Follow the excerpt count from your Story Mode guidelines above (first and last chapters always have 0).
 
-Write excerpts to ${generationDir}/excerpts.md
-End the file with: EXCERPTS_COMPLETE
+Write valid JSON to ${generationDir}/excerpts.json:
+\`\`\`json
+{
+  "chapters": [
+    { "id": "chapter-1", "excerpts": [ { "content": "", "latexSource": "", "type": "text", "sourceFile": "", "label": "", "pdfRegion": null } ] }
+  ]
+}
+\`\`\`
+Output ONLY valid JSON to the file.`,
 
-### Stage 4: Verification
-For EVERY excerpt collected in Stage 3:
+    verification: `### Stage 4: Verification
+Read ${generationDir}/excerpts.json. For EVERY excerpt collected in Stage 3:
 1. ${isWebpage ? 'Use Grep/Read to search for a distinctive phrase from the `latexSource` in page.md or page.html, and verify any `visualUrl` against page-metadata.json' : hasSource ? 'Use Grep to search for a distinctive phrase from the `latexSource` in the source files' : 'Verify the excerpt text against the PDF regions index or re-read the relevant PDF page'}
 2. Confirm the raw ${isWebpage ? 'webpage quote' : hasSource ? 'LaTeX' : 'text'} source exists ${isWebpage ? 'verbatim in the webpage source bundle' : hasSource ? 'verbatim in the .tex files' : 'in the PDF'}
 3. For equation excerpts, verify that \`content\` is mathematically equivalent to \`latexSource\` (same symbols, operators, structure — just cleaned for KaTeX)
-4. If a latexSource cannot be verified in the source files, REMOVE the excerpt or replace it with a verified one
+4. If a latexSource cannot be verified, REMOVE the excerpt or replace it with a verified one
 
-Write verification results to ${generationDir}/verification.md
-End the file with: VERIFICATION_COMPLETE
+Write the verified/corrected excerpts (SAME shape as excerpts.json) to ${generationDir}/verification.json.
+Output ONLY valid JSON to the file.`,
 
-### Stage 5: Explanation Writing
-Write the explanation markdown for each chapter:
+    explanations: `### Stage 5: Explanation Writing
+Read ${generationDir}/outline.json and ${generationDir}/verification.json. Write the explanation
+markdown for each chapter:
 
 - **Structure**: Cover WHY this concept matters, WHAT it is, HOW it works, and what to WATCH OUT for — but weave these together as natural prose, not as labeled sections or mechanical topic sentences
-- **No mechanical openers**: Never start a chapter with phrases like "This chapter matters because..." or "This section is important because...". Instead, open with a compelling observation, a question, an analogy, or a concrete consequence that draws the reader in and implicitly conveys why the topic matters. The motivation should be felt, not announced.
-- **Self-contained explanations**: Write each explanation so it stands alone — the reader should be able to follow every point without looking at the excerpt. Do NOT write phrases like "as shown in the excerpt above", "the passage above states", or "as you can see in the quote". Instead, inline the key idea, equation, or claim directly in the explanation (paraphrase or quote it briefly), and use the excerpt as supplementary material the reader may consult for the original wording. The default reader browses explanations without cross-checking excerpts.
+- **No mechanical openers**: Never start a chapter with phrases like "This chapter matters because...". Instead, open with a compelling observation, a question, an analogy, or a concrete consequence that draws the reader in. The motivation should be felt, not announced.
+- **Self-contained explanations**: Write each explanation so it stands alone — the reader should be able to follow every point without looking at the excerpt. Do NOT write "as shown in the excerpt above", "the passage above states", or "as you can see in the quote". Inline the key idea, equation, or claim directly.
 - **Intuition first**: Always ground formal definitions in intuition before or alongside the formalism
 - **Math**: Use KaTeX-compatible LaTeX in explanations (inline: $...$ , display: $$...$$)
 - **Cross-references**: Connect chapters ("As we saw in Chapter 3..." or "This connects to the loss function in the next chapter")
@@ -451,11 +606,15 @@ Write the explanation markdown for each chapter:
 - **Critical analysis**: Don't just describe — interpret. "This is clever because...", "The limitation here is...", "Compared to X, this approach..."
 - Adapt tone and depth to the source type (see your Story Mode guidelines above)
 
-Write explanations to ${generationDir}/explanations.md
-End the file with: EXPLANATIONS_COMPLETE
+Write valid JSON to ${generationDir}/explanations.json:
+\`\`\`json
+{ "chapters": [ { "id": "chapter-0", "explanation": "" } ] }
+\`\`\`
+Output ONLY valid JSON to the file.`,
 
-### Stage 6: Final Assembly
-Assemble everything into a single story.json file.
+    assemble: `### Stage 6: Final Assembly
+Read ${generationDir}/index.json, ${generationDir}/outline.json, ${generationDir}/verification.json,
+and ${generationDir}/explanations.json, then assemble everything into a single story.json file.
 
 **Schema** (write to ${generationDir}/story.json):
 \`\`\`json
@@ -499,8 +658,11 @@ Assemble everything into a single story.json file.
 }
 \`\`\`
 
+Use the verified excerpts from verification.json and the explanations from explanations.json; take
+metadata (authors/year/institutions/title) from index.json's \`metadata\` unless exploration corrected it.
+
 **Validation before writing:**
-1. Every non-proof excerpt.latexSource exists ${hasSource ? 'verbatim in the source files' : 'faithfully in the PDF'}
+1. Every non-proof excerpt.latexSource exists ${hasSource ? 'verbatim in the source files' : 'faithfully in the PDF'} (it came from verification.json)
 2. Every non-proof excerpt has a non-empty latexSource field; proof excerpts have statement + steps instead
 2a. authors is an array of strings (or null if genuinely undetectable)
 2b. publishedYear and publishedMonth are integers (or null if genuinely undetectable)
@@ -514,16 +676,14 @@ Assemble everything into a single story.json file.
 9. Total chapters: flexible based on source type and content density (8-45 range)
 10. If regions index was available, most excerpts should have a \`pdfRegion\` with valid page and bbox values
 
-Write the final story.json to ${generationDir}/story.json
+Write the final story.json to ${generationDir}/story.json.
 After writing, end by creating a file ${generationDir}/DONE containing just the text "DONE".
 
 ## Important Notes
-- Take your time. Read thoroughly before writing.
-- When in doubt, include MORE source context in latexSource, not less.
 - For equations, the \`content\` field should be KaTeX-renderable LaTeX (adapted from source if needed). The \`latexSource\` field must be the raw verbatim copy.
 - For text excerpts, the \`content\` field should be readable (no \\cite{} etc.) but the \`latexSource\` should be the raw version.
-- For webpage excerpts, \`latexSource\` still means "raw source quote": copy the exact source sentence/paragraph/caption from \`page.md\` or \`page.html\`. Prefer setting \`sourceFile\` to \`page.md\`; use \`page.html\` only when verifying an image or caption that is clearer in the raw HTML.
-- For webpage figure excerpts, include \`visualUrl\` when \`page-metadata.json\` has a relevant image URL. Do not invent image URLs.
-- Generate a proper UUID v4 for the story id.
-`;
+- Generate a proper UUID v4 for the story id.`,
+  };
+
+  return { shared, stages };
 }

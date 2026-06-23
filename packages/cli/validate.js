@@ -55,6 +55,33 @@ export function validateSources(sources) {
 }
 
 /**
+ * Validates the optional `generation` block (per-stage model + token usage,
+ * written by the CLI). Lenient by design — it is telemetry, not story content —
+ * but rejects an outright wrong shape so the viewer can trust `stages` is an
+ * array of `{ key, model }` records.
+ */
+export function validateGeneration(generation) {
+  if (generation === undefined || generation === null) return;
+  if (typeof generation !== 'object' || Array.isArray(generation)) {
+    throw new Error('story.generation must be an object when present');
+  }
+  if (!Array.isArray(generation.stages)) {
+    throw new Error('story.generation.stages must be an array');
+  }
+  for (const stage of generation.stages) {
+    if (typeof stage !== 'object' || stage === null) {
+      throw new Error('Each story.generation.stages entry must be an object');
+    }
+    if (!stage.key || typeof stage.key !== 'string') {
+      throw new Error('Each generation stage must have a non-empty string key');
+    }
+    if (stage.model !== undefined && stage.model !== null && typeof stage.model !== 'string') {
+      throw new Error(`Generation stage "${stage.key}" has invalid model`);
+    }
+  }
+}
+
+/**
  * Validates a story JSON object. Throws if invalid.
  *
  * arxivId and arxivUrl are optional (may be null for local sources).
@@ -68,6 +95,7 @@ export function validateStory(story) {
   if (story.sourceUrl !== undefined && story.sourceUrl !== null && typeof story.sourceUrl !== 'string') {
     throw new Error('Invalid story.sourceUrl');
   }
+  validateGeneration(story.generation);
   if (!Array.isArray(story.chapters) || story.chapters.length < 5) {
     throw new Error(`Expected at least 5 chapters, got ${story.chapters?.length || 0}`);
   }
