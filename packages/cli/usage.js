@@ -96,8 +96,9 @@ export function normalizeUsage(usage) {
  * "n/a" rather than a misleading 0.
  *
  * @param {Array<object>} stageUsages - normalized per-stage records (with key/model)
+ * @param {string[]} parseErrors - stage keys where usage parsing produced null
  */
-export function buildGenerationStats(stageUsages) {
+export function buildGenerationStats(stageUsages, parseErrors = []) {
   const sumKeys = ['inputTokens', 'outputTokens', 'cacheReadInputTokens', 'cacheCreationInputTokens', 'costUsd'];
   const totals = {};
   let any = false;
@@ -128,5 +129,6 @@ export function buildGenerationStats(stageUsages) {
     generatedAt: new Date().toISOString(),
     stages: stageUsages,
     totals: any || tokenSeen ? totals : null,
+    ...(parseErrors.length > 0 ? { parseErrors } : {}),
   };
 }

@@ -150,6 +150,7 @@ async function generateWebpageStory(url, options) {
     options,
     sourceType: 'webpage',
     sourceUrl: metadata.url,
+    hasTextSource: true,
   });
 }
 
@@ -208,6 +209,7 @@ async function generateLocalStory(options) {
     options,
     sourceType: 'local',
     sourceUrl: null,
+    hasTextSource: false,
   });
 }
 
@@ -274,6 +276,7 @@ async function generateStory(arxivInput, options) {
     options,
     sourceType: 'arxiv',
     sourceUrl: arxivUrl,
+    hasTextSource: sourceResult.hasSource,
   });
 }
 
@@ -395,6 +398,7 @@ async function generateCollectionStory(options) {
     sourceUrl: null,
     addDirs: [generationDir, workDir],
     pdfArtifacts,
+    hasTextSource: sources.some(s => s.hasSource),
   });
 }
 
@@ -409,7 +413,7 @@ async function generateCollectionStory(options) {
  *                                           stories there is one per source; for single-source
  *                                           flows it defaults to the single pdfPath (sourceId null).
  */
-async function runGenerationPipeline({ promptParts, generationDir, workDir, sourceResult, pdfPath, options, sourceType, sourceUrl, addDirs, pdfArtifacts }) {
+async function runGenerationPipeline({ promptParts, generationDir, workDir, sourceResult, pdfPath, options, sourceType, sourceUrl, addDirs, pdfArtifacts, hasTextSource }) {
   const { shared, stages: stageInstructions } = promptParts;
 
   // Directories the per-stage agents are allowed to read.
@@ -439,25 +443,45 @@ async function runGenerationPipeline({ promptParts, generationDir, workDir, sour
   const jsonComplete = (key) => (p) => fileIsJsonWith(p, key);
   const markerComplete = (marker) => (p) => hasMarker(p, marker);
 
+  // displayLabel: short viewer label — keep in sync with STAGE_LABELS in
+  // packages/viewer/src/components/GenerationStats.tsx
   const stages = [
-    { key: 'index', output: 'index.json', label: 'Stage 0: Indexing source...', isComplete: jsonComplete('segments') },
-    { key: 'exploration', output: 'exploration.md', label: 'Stage 1: Exploring sources...', isComplete: markerComplete('EXPLORATION_COMPLETE') },
-    { key: 'outline', output: 'outline.json', label: 'Stage 2: Planning chapter outline...', isComplete: jsonComplete('chapters') },
-    { key: 'excerpts', output: 'excerpts.json', label: 'Stage 3: Collecting excerpts...', isComplete: jsonComplete('chapters') },
-    { key: 'verification', output: 'verification.json', label: 'Stage 4: Verifying excerpts against source...', isComplete: jsonComplete('chapters') },
-    { key: 'explanations', output: 'explanations.json', label: 'Stage 5: Writing explanations...', isComplete: jsonComplete('chapters') },
-    { key: 'assemble', output: 'DONE', label: 'Stage 6: Assembling final story...', isComplete: markerComplete('DONE') },
+    { key: 'index',        displayLabel: 'Index',        output: 'index.json',        label: 'Stage 0: Indexing source...',                    isComplete: jsonComplete('segments') },
+    { key: 'exploration',  displayLabel: 'Exploration',  output: 'exploration.md',    label: 'Stage 1: Exploring sources...',                  isComplete: markerComplete('EXPLORATION_COMPLETE') },
+    { key: 'outline',      displayLabel: 'Outline',      output: 'outline.json',      label: 'Stage 2: Planning chapter outline...',           isComplete: jsonComplete('chapters') },
+    { key: 'excerpts',     displayLabel: 'Excerpts',     output: 'excerpts.json',     label: 'Stage 3: Collecting excerpts...',                isComplete: jsonComplete('chapters') },
+    { key: 'verification', displayLabel: 'Verification', output: 'verification.json', label: 'Stage 4: Verifying excerpts against source...', isComplete: jsonComplete('chapters') },
+    { key: 'explanations', displayLabel: 'Explanations', output: 'explanations.json', label: 'Stage 5: Writing explanations...',              isComplete: jsonComplete('chapters') },
+    { key: 'assemble',     displayLabel: 'Assembly',     output: 'DONE',              label: 'Stage 6: Assembling final story...',             isComplete: markerComplete('DONE') },
   ];
 
   // Per-stage token usage, collected for story.generation so the viewer can
   // surface model + token cost per stage on the overview page.
   const stageUsages = [];
+  // Stage keys where parseStageUsage returned null (usage envelope missing or
+  // format changed). Surfaced in story.generation.parseErrors so the viewer can
+  // flag degraded telemetry rather than silently showing "—" everywhere.
+  const parseErrors = [];
 
   try {
     for (const stage of stages) {
       const model = options.config.models[stage.key];
-      spinner.text = `${stage.label} [${model}]`;
       const expectedPath = join(generationDir, stage.output);
+
+      // Stage 0 (index) is only useful when text files (.tex or .md) are
+      // available — the LLM would have to read the whole PDF anyway. Skip the
+      // LLM call entirely and write an empty index so later stages know
+      // indexing was not possible.
+      if (stage.key === 'index' && !hasTextSource) {
+        if (!existsSync(expectedPath)) {
+          writeFileSync(expectedPath, JSON.stringify({ indexSkipped: true, metadata: {}, segments: [] }, null, 2));
+        }
+        spinner.text = 'Stage 0: Indexing skipped (no text source)';
+        stageUsages.push({ key: stage.key, displayLabel: stage.displayLabel, model: null, ...normalizeUsage(null) });
+        continue;
+      }
+
+      spinner.text = `${stage.label} [${model}]`;
       const { usage } = await runConfiguredStage({
         prompt: buildStagePrompt(shared, stageInstructions[stage.key]),
         model,
@@ -467,7 +491,8 @@ async function runGenerationPipeline({ promptParts, generationDir, workDir, sour
         isComplete: () => stage.isComplete(expectedPath),
         stageLabel: stage.label,
       });
-      stageUsages.push({ key: stage.key, model: model ?? null, ...normalizeUsage(usage) });
+      if (usage === null) parseErrors.push(stage.key);
+      stageUsages.push({ key: stage.key, displayLabel: stage.displayLabel, model: model ?? null, ...normalizeUsage(usage) });
     }
   } catch (err) {
     spinner.fail('Generation failed');
@@ -494,7 +519,7 @@ async function runGenerationPipeline({ promptParts, generationDir, workDir, sour
 
   // Attach per-stage token usage + totals so the viewer can show how the story
   // was generated (model + tokens per stage) on its first page.
-  story.generation = buildGenerationStats(stageUsages);
+  story.generation = buildGenerationStats(stageUsages, parseErrors);
 
   // Record which chat model this story was built with so the viewer can use
   // the same model for routing and labeling regardless of startup config.
@@ -688,14 +713,15 @@ function hasMarker(filePath, marker) {
 
 /**
  * A structured stage is complete only when its output file exists AND parses as
- * JSON AND carries the expected top-level key. This is stricter than a substring
- * marker: a half-written or truncated JSON file is treated as a failed stage.
+ * JSON AND carries the expected top-level key as an array. This is stricter than a
+ * substring marker: a half-written or truncated JSON file, or one where the key
+ * maps to null/string instead of an array, is treated as a failed stage.
  */
 function fileIsJsonWith(filePath, requiredKey) {
   if (!existsSync(filePath)) return false;
   try {
     const data = JSON.parse(readFileSync(filePath, 'utf8'));
-    if (requiredKey && (data === null || typeof data !== 'object' || !(requiredKey in data))) return false;
+    if (requiredKey && (data === null || typeof data !== 'object' || !Array.isArray(data[requiredKey]))) return false;
     return true;
   } catch {
     return false;

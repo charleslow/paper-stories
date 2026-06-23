@@ -1885,6 +1885,16 @@ html, body {
   color: var(--text-primary);
 }
 
+.gen-stats-warn {
+  margin: 0 0 0.6rem;
+  font-size: 0.8rem;
+  color: var(--color-warning, #b45309);
+  background: var(--bg-warning, #fffbeb);
+  border: 1px solid var(--border-warning, #fde68a);
+  border-radius: var(--radius-small, 4px);
+  padding: 0.35rem 0.65rem;
+}
+
 .gen-stats-foot {
   margin: 0.6rem 0 0;
   font-size: 0.75rem;

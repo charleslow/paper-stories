@@ -67,6 +67,8 @@ export interface Chapter {
  */
 export interface StageUsage {
   key: string;
+  /** Short viewer label written by the CLI. Supersedes STAGE_LABELS lookup. */
+  displayLabel?: string;
   model: string | null;
   inputTokens?: number | null;
   outputTokens?: number | null;
@@ -93,6 +95,8 @@ export interface GenerationStats {
   generatedAt?: string;
   stages: StageUsage[];
   totals?: GenerationTotals | null;
+  /** Stage keys where usage parsing produced null (runner format may have changed). */
+  parseErrors?: string[];
 }
 
 export interface Story {

@@ -30,25 +30,23 @@
 
 /**
  * Shared "how to use the source index" note included in every stage's preamble.
- * The index is grep-anchored: each segment carries a verbatim `anchor` string so
- * downstream stages locate it with an exact Grep rather than trusting line
- * numbers (which drift). Line numbers are hints only.
+ * The index uses line numbers as hard demarcators for text files (.tex/.md) so
+ * downstream stages can Read exact ranges without Grep. For PDF-only sources the
+ * index is skipped and segments is an empty array.
  */
 const INDEX_USAGE = `## Source Index (index.json)
 Stage 0 writes a structured map of the source to \`index.json\` in the generation directory.
 Every later stage should read it FIRST to navigate the source instead of re-reading everything.
-Each entry in \`segments\` has:
+When indexing was possible (text source available), each entry in \`segments\` has:
 - \`id\` — stable short id (e.g. "seg-12")
 - \`kind\` — section | subsection | definition | theorem | lemma | proof | equation | figure | table | other
 - \`label\` — human label (e.g. "Section 3.2", "Theorem 1", "Figure 4")
-- \`sourceFile\` — relative path / page.md / PDF the segment lives in
-- \`anchor\` — a SHORT verbatim string copied from the source that uniquely locates the segment
-  (a heading, a \\label{...}, a \\begin{theorem}, or the first 4-8 words). It appears VERBATIM in the
-  source, so locate a segment by Grep-ing this exact string, then Read only that region.
-- \`lineStart\` / \`lineEnd\` — approximate line-range hints (integers; may be 0/absent)
+- \`sourceFile\` — relative path to the .tex or .md file the segment lives in
+- \`lineStart\` / \`lineEnd\` — EXACT 1-indexed line range in sourceFile. Pull a segment with
+  Read(sourceFile, { offset: lineStart - 1, limit: lineEnd - lineStart + 1 }).
 - \`page\` — 0-indexed PDF page if known (optional)
-To pull an excerpt or read a segment: Grep its \`anchor\`, then Read the matched region. Trust the
-anchor over the line numbers if they disagree.`;
+When \`index.json\` carries \`"indexSkipped": true\` or an empty \`segments\` array, no text source
+was available — navigate the PDF or source files directly without an index.`;
 
 /**
  * Build the generation prompt for a multi-source ("collection") story that
@@ -149,13 +147,14 @@ do not perform other stages. The hand-off files (relative to the generation dire
 
   const stages = {
     index: `### Stage 0: Source Index
-Build a structured, grep-anchored map of EVERY source so later stages can navigate without
-re-reading everything. Skim each source in turn (its .tex via Glob/Read, page.md, or PDF / regions
-index) and catalogue its segments: sections, definitions, theorems, lemmas, key equations, figures,
-tables. For EACH segment record \`id\`, \`kind\`, \`label\`, \`sourceId\` (one of ${idList}), \`sourceFile\`,
-\`anchor\` (a SHORT verbatim string that uniquely locates it — heading / \\label / first 4-8 words),
-\`lineStart\`/\`lineEnd\` hints, and \`page\` (0-indexed in THAT source's PDF) when known. Also extract,
-per source, its title, authors (as written), publication month+year, and institutions.
+Build a line-demarcated map of every source that has text files (.tex or .md) so later stages can
+navigate without re-reading everything. For PDF-only sources, skip segments (they will be read
+directly from the PDF). Read each text source in turn and catalogue its segments: sections,
+definitions, theorems, lemmas, key equations, figures, tables. For EACH segment record \`id\`, \`kind\`,
+\`label\`, \`sourceId\` (one of ${idList}), \`sourceFile\`, \`lineStart\`/\`lineEnd\` (EXACT 1-indexed line
+range — later stages use Read(sourceFile, { offset: lineStart - 1, limit: lineEnd - lineStart + 1 })),
+and \`page\` (0-indexed in THAT source's PDF) when known. Also extract per source: title, authors (as
+written), publication month+year, and institutions.
 Write valid JSON to ${generationDir}/index.json:
 \`\`\`json
 {
@@ -163,7 +162,7 @@ Write valid JSON to ${generationDir}/index.json:
     { "id": "<one of ${idList}>", "title": "", "authors": [], "publishedYear": null, "publishedMonth": null, "institutions": [] }
   ],
   "segments": [
-    { "id": "seg-1", "kind": "theorem", "label": "Theorem 1", "sourceId": "s1", "sourceFile": "main.tex", "anchor": "\\\\begin{theorem}", "lineStart": 0, "lineEnd": 0, "page": null }
+    { "id": "seg-1", "kind": "theorem", "label": "Theorem 1", "sourceId": "s1", "sourceFile": "main.tex", "lineStart": 87, "lineEnd": 142, "page": null }
   ]
 }
 \`\`\`
@@ -171,7 +170,7 @@ Output ONLY valid JSON to the file (no prose, no markers).`,
 
     exploration: `### Stage 1: Source Exploration
 Read ${generationDir}/index.json FIRST to orient, then read the regions of each source that matter.
-- Explore EACH source in turn (read its .tex / page.md / PDF), navigating via the index anchors.
+- Explore EACH source in turn (read its .tex / page.md / PDF), navigating via index line ranges when available.
 - For EACH source confirm: a concise title, authors (as written), publication month+year, and
   institutions/affiliations if listed.
 - Note the throughline: what connects these sources? Where do they agree, differ, or build on each other?
@@ -195,9 +194,10 @@ Output ONLY valid JSON to the file.`,
 
     excerpts: `### Stage 3: Excerpt Collection
 Read ${generationDir}/index.json and ${generationDir}/outline.json first. For each chapter, collect
-1-3 excerpts (first and last chapters: 0). For each planned segment, Grep its \`anchor\` to locate it,
-then Read that region. Each excerpt is one of: \`text\`, \`equation\`, or \`figure\`. For EACH excerpt:
-1. Read the specific source file containing it (located via the index anchor).
+1-3 excerpts (first and last chapters: 0). For each planned segment, Read its \`sourceFile\` at the
+given \`lineStart\`/\`lineEnd\` range; fall back to Grep when no index segment exists (PDF-only sources).
+Each excerpt is one of: \`text\`, \`equation\`, or \`figure\`. For EACH excerpt:
+1. Read the specific source file containing it (use the index line range, or Grep for PDF-only sources).
 2. Copy the EXACT raw source into \`latexSource\` — character for character.
 3. Set \`sourceId\` to that source's id, and \`sourceFile\` to the relative path within that source.
 4. Write a KaTeX-renderable \`content\` (clean text for text/figure caption; pure KaTeX LaTeX for equation).
@@ -450,18 +450,15 @@ do not perform other stages. The hand-off files (relative to the generation dire
 
   const stages = {
     index: `### Stage 0: Source Index
-Build a structured, grep-anchored map of the source so later stages can navigate without re-reading
-everything. Skim the source (${isWebpage ? 'page.md and page-metadata.json' : hasSource ? 'the .tex files via Glob/Read' : 'the PDF / regions index'}) and catalogue its
-segments: sections, definitions, theorems, lemmas, key equations, figures, tables. For EACH segment
-record:
+Build a line-demarcated map of the ${isWebpage ? 'webpage source (page.md and page-metadata.json)' : 'LaTeX source (.tex files)'} so later stages can navigate without re-reading
+everything. Read each source file and catalogue its segments: sections, definitions, theorems, lemmas,
+key equations, figures, tables. For EACH segment record:
 - \`id\` — stable short id ("seg-1", "seg-2", ...)
 - \`kind\` — section | subsection | definition | theorem | lemma | proof | equation | figure | table | other
 - \`label\` — human label ("Section 3.2", "Theorem 1", "Figure 4")
-- \`sourceFile\` — relative path / page.md / PDF the segment lives in
-- \`anchor\` — a SHORT verbatim string copied from the source that uniquely locates the segment
-  (a heading, a \\label{...}, a \\begin{theorem}, or the first 4-8 words). It MUST appear verbatim in the
-  source so a later Grep finds it.
-- \`lineStart\`/\`lineEnd\` — approximate line-range hints (integers; 0 if unknown)
+- \`sourceFile\` — relative path to the source file (e.g. "main.tex" or "page.md")
+- \`lineStart\`/\`lineEnd\` — EXACT 1-indexed line range in sourceFile. Later stages pull the segment
+  with Read(sourceFile, { offset: lineStart - 1, limit: lineEnd - lineStart + 1 }).
 - \`page\` — 0-indexed PDF page if known (optional, null otherwise)
 Also extract document metadata from the title page / abstract / author block: title, authors (full
 names as written), publication month+year, institutions/affiliations (deduplicated).
@@ -470,7 +467,7 @@ Write valid JSON to ${generationDir}/index.json:
 {
   "metadata": { "title": "", "authors": [], "publishedYear": null, "publishedMonth": null, "institutions": [] },
   "segments": [
-    { "id": "seg-1", "kind": "section", "label": "Section 1", "sourceFile": "main.tex", "anchor": "\\\\section{Introduction}", "lineStart": 0, "lineEnd": 0, "page": null }
+    { "id": "seg-1", "kind": "section", "label": "Section 1", "sourceFile": "main.tex", "lineStart": 42, "lineEnd": 120, "page": null }
   ]
 }
 \`\`\`
@@ -478,8 +475,8 @@ Output ONLY valid JSON to the file (no prose, no markers).`,
 
     exploration: `### Stage 1: Source Exploration
 Read ${generationDir}/index.json FIRST to orient, then read the regions of the source that matter,
-navigating via the index anchors.
-- ${isWebpage ? 'Read page.md and page-metadata.json thoroughly; use page.html only when the readable extraction needs confirmation' : hasSource ? 'Read the key .tex regions (start with the main .tex, follow \\\\input{} / \\\\include{} references) using the index to jump to sections' : 'Read the PDF thoroughly, page by page'}
+navigating via the index line numbers (Read sourceFile at lineStart/lineEnd) when segments are present.
+- ${isWebpage ? 'Read page.md and page-metadata.json thoroughly; use page.html only when the readable extraction needs confirmation' : hasSource ? 'Read the key .tex regions (start with the main .tex, follow \\\\input{} / \\\\include{} references) using the index line ranges to jump to sections' : 'Read the PDF thoroughly, page by page'}
 - ${hasPdf && hasSource ? 'Read the PDF for overview context' : ''}
 - Map the structure: sections, key equations, theorems, algorithms, tables, figures
 - **Confirm paper metadata** from the index / title page / abstract / author block:
@@ -513,8 +510,9 @@ Output ONLY valid JSON to the file.`,
 
     excerpts: `### Stage 3: Excerpt Collection
 Read ${generationDir}/index.json and ${generationDir}/outline.json first. For each chapter, collect its
-excerpts from the source (first and last chapters: 0). For each planned segment, Grep its \`anchor\` to
-locate it, then Read that region.
+excerpts from the source (first and last chapters: 0). For each planned segment, Read its \`sourceFile\`
+at the given \`lineStart\`/\`lineEnd\` range (Read(sourceFile, { offset: lineStart - 1, limit: lineEnd - lineStart + 1 }))
+to pull the content; fall back to Grep when no index is available.
 
 Each excerpt should be one of:
 - **text**: A key paragraph, definition, or claim (may contain inline or display math)
@@ -526,7 +524,7 @@ Each excerpt should be one of:
 If an excerpt mixes prose with math (e.g., a sentence defining a variable followed by an equation, or a paragraph that includes inline math expressions), it MUST be typed as "text", NOT "equation". The "equation" type is ONLY for excerpts whose entire content is a mathematical expression — no natural-language sentences surrounding it. When in doubt, use "text". The text renderer supports both inline math (\`$...$\`) and display math (\`$$...$$\`), so equations embedded in prose will render correctly as text excerpts.
 
 For EACH excerpt you collect:
-1. Read the source ${sourceWord} containing it (located via the index anchor)
+1. Read the source ${sourceWord} containing it (use the index line range, or Grep if no index)
 2. Copy the EXACT raw ${rawWord} into \`latexSource\` — character for character
 3. Record which file it came from
 4. Write a KaTeX-renderable version into \`content\` (see below)
