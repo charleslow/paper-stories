@@ -70,10 +70,11 @@ function runCodex(prompt: string, storiesDir: string, model?: string | null): Pr
 
     const args = ['exec']
     if (model) args.push('--model', model)
-    // Q&A only ever needs to read story context; a read-only sandbox keeps the
-    // non-interactive exec from hanging on approvals or writing story files.
-    // (--full-auto was removed in codex 0.149)
-    args.push('--sandbox', 'read-only', '--skip-git-repo-check', '-')
+    // --full-auto was removed in codex 0.149; --sandbox workspace-write is the
+    // documented replacement and keeps the same semantics (workspace edits
+    // allowed, approvals auto). Chat reads story files via the Read tool,
+    // which needs at least workspace-write to function.
+    args.push('--sandbox', 'workspace-write', '--skip-git-repo-check', '-')
 
     const proc = spawn('codex', args, {
       stdio: ['pipe', 'pipe', 'pipe'],
