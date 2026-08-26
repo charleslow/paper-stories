@@ -4,6 +4,7 @@ import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import { ChatMessage } from '../types';
 import { sendChatMessage, fetchChatHistory, requestProof } from '../api';
+import { normalizeMathDelimiters } from '../markdown';
 
 interface ChatPanelProps {
   storyId: string;
@@ -163,7 +164,7 @@ export default function ChatPanel({
             <div className="chat-message-role">{msg.role === 'user' ? 'You' : modelLabel}</div>
             <div className="chat-message-content">
               <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
-                {msg.content}
+                {normalizeMathDelimiters(msg.content)}
               </ReactMarkdown>
             </div>
           </div>

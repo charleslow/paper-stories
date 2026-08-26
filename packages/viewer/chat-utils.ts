@@ -130,6 +130,7 @@ export function buildChatPrompt(input: BuildChatPromptInput): string {
   lines.push(`Reader's question: ${message}`)
   lines.push(``)
   lines.push(`Respond concisely. Use $...$ for inline math and $$...$$ for display math.`)
+  lines.push(`Never use \\( \\) or \\[ \\] math delimiters — the reader only renders $ and $$ delimiters.`)
 
   return lines.join('\n')
 }
