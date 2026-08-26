@@ -70,7 +70,11 @@ function runCodex(prompt: string, storiesDir: string, model?: string | null): Pr
 
     const args = ['exec']
     if (model) args.push('--model', model)
-    args.push('--full-auto', '-')
+    // --full-auto was removed in codex 0.149; --sandbox workspace-write is the
+    // documented replacement and keeps the same semantics (workspace edits
+    // allowed, approvals auto). Chat reads story files via the Read tool,
+    // which needs at least workspace-write to function.
+    args.push('--sandbox', 'workspace-write', '--skip-git-repo-check', '-')
 
     const proc = spawn('codex', args, {
       stdio: ['pipe', 'pipe', 'pipe'],

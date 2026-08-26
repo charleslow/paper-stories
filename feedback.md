@@ -8,3 +8,4 @@
 | 2026-05-23 | Font size feels a tad small to read on mobile. |
 | 2026-06-11 | Collection story validation should be driven by story.sourceType, not only by the number of sources the LLM emitted — a collection story with 0 or 1 sources in the output should be rejected, and excerpts without sourceId should be caught. |
 | 2026-06-11 | Generation should fail upfront when any collection source is unreadable (e.g. invalid arXiv ID alongside a valid PDF), with an error message identifying which source failed. |
+| 2026-08-26 | The ask-question panel shows raw LaTeX when assistant replies use \(...\)/\[...\] delimiters instead of $...$/$$...$$. Replies should always render math regardless of which delimiter style the model emits. |

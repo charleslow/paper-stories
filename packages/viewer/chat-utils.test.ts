@@ -110,6 +110,12 @@ describe('buildChatPrompt', () => {
     const prompt = buildChatPrompt(baseInput)
     expect(prompt).not.toContain('Prior conversation')
   })
+
+  it('restricts math delimiters to $ and $$', () => {
+    const prompt = buildChatPrompt(baseInput)
+    expect(prompt).toContain('$...$')
+    expect(prompt).toContain('Never use \\( \\) or \\[ \\]')
+  })
 })
 
 describe('readBody', () => {
