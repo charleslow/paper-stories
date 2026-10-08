@@ -206,4 +206,6 @@ Every excerpt includes:
 
 GitHub Pages via `.github/workflows/deploy-viewer.yml`. Merging to `main` auto-deploys the viewer.
 
+The local preview server runs as a systemd unit owned by this repo in [`systemd/`](./systemd/); the rebuild installer discovers `~/repos/*/systemd/` and installs those units.
+
 Stories are stored in [`code-stories-cache`](https://github.com/charleslow/code-stories-cache) and fetched at runtime.
