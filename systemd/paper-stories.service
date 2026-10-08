@@ -1,0 +1,15 @@
+[Unit]
+Description=Paper Stories Vite Preview Server
+After=network.target
+
+[Service]
+Type=simple
+User=claw
+WorkingDirectory=/home/claw/repos/paper-stories/packages/viewer
+ExecStart=/home/claw/repos/paper-stories/node_modules/.bin/vite preview --host 0.0.0.0 --port 5174
+Environment="PATH=/home/claw/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/snap/bin"
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
